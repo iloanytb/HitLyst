@@ -1,0 +1,10 @@
+RewriteEngine On
+
+# Si le fichier demandé n'existe pas
+RewriteCond %{REQUEST_FILENAME} !-f
+
+# Si le dossier demandé n'existe pas
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Rediriger la requête vers le routeur MVC
+RewriteRule ^(.*)$ index.php?url=$1 [L,QSA]
