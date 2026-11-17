@@ -83,4 +83,8 @@ CREATE TABLE IF NOT EXISTS Favori (
 
     
 
+<<<<<<< HEAD
     
+=======
+    
+>>>>>>> 16169a3f682cd001634ed7919ca9ab09e589b7fa
