@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Top 50 Spotify</title>
+<style>
+  :root { --bg:#121212; --card:#181818; --hover:#282828; --text:#fff; --muted:#b3b3b3; --green:#1db954; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:24px 20px 12px; position:sticky; top:0; background:var(--bg); z-index:10; border-bottom:1px solid #222; }
+  h1 { margin:0 0 12px; font-size:22px; }
+  nav { display:flex; gap:8px; flex-wrap:wrap; }
+  nav button { background:#242424; color:var(--text); border:0; border-radius:20px; padding:8px 14px; cursor:pointer; font-size:14px; }
+  nav button.active { background:var(--green); color:#000; font-weight:600; }
+  main { padding:16px 20px 120px; max-width:900px; margin:0 auto; }
+  .track { display:grid; grid-template-columns: 28px 56px 1fr auto; gap:14px; align-items:center; padding:8px; border-radius:6px; }
+  .track:hover { background:var(--hover); }
+  .rank { color:var(--muted); text-align:right; font-variant-numeric: tabular-nums; }
+  .cover { width:56px; height:56px; border-radius:4px; object-fit:cover; background:#333; }
+  .info { min-width:0; }
+  .name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .name a { color:inherit; text-decoration:none; }
+  .name a:hover { text-decoration:underline; }
+  .meta { color:var(--muted); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .play { background:var(--green); color:#000; border:0; width:40px; height:40px; border-radius:50%; cursor:pointer; font-size:16px; }
+  .play:disabled { background:#333; color:#777; cursor:not-allowed; }
+  .play.playing { background:#fff; }
+  .embed { grid-column: 1 / -1; }
+  .embed iframe { width:100%; height:80px; border:0; border-radius:8px; }
+  .notice { color:var(--muted); padding:20px 0; }
+  .login { text-align:center; padding:40px 0; }
+  .login input { width:100%; max-width:420px; padding:10px; border-radius:6px; border:1px solid #333; background:#222; color:#fff; margin:8px 0; }
+  .login button { background:var(--green); border:0; padding:10px 20px; border-radius:20px; font-weight:600; cursor:pointer; }
+  .player { position:fixed; bottom:0; left:0; right:0; background:#000; padding:10px 20px; display:none; align-items:center; gap:12px; border-top:1px solid #222; }
+  .player.show { display:flex; }
+  .player img { width:44px; height:44px; border-radius:4px; }
+  .player .t { flex:1; min-width:0; }
+  .player .t div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .player .t .sub { color:var(--muted); font-size:13px; }
+  .player button { background:none; border:1px solid #555; color:#fff; border-radius:16px; padding:6px 12px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Top 50 Spotify</h1>
+  <nav id="tabs"></nav>
+</header>
+<main id="content"><div class="notice">Chargement…</div></main>
+
+<div class="player" id="player">
+  <img id="pCover" alt="">
+  <div class="t"><div id="pName"></div><div class="sub" id="pArtist"></div></div>
+  <button id="pStop">Arrêter</button>
+</div>
+<audio id="audio"></audio>
+
+<script>
+// ----- CONFIG -----
+// 1) Créez une application sur https://developer.spotify.com/dashboard
+// 2) Ajoutez l'URL exacte de cette page dans "Redirect URIs"
+// 3) Collez le Client ID ci-dessous
+const CLIENT_ID = "85df29e3ccc6436c9d46219238902cab";
+
+const PLAYLISTS = {
+  "Monde":        "37i9dQZEVXbMDoHDwVN2tF",
+  "France":       "37i9dQZEVXbIPWwFssbupI",
+  "Italie":       "37i9dQZEVXbIQnj7RRhdSX",
+  "États-Unis":   "37i9dQZEVXbLRQDuF5jeBp",
+  "Allemagne":    "37i9dQZEVXbJiZcmkrIHGU",
+  "Espagne":      "37i9dQZEVXbNFJfN1Vw8d9"
+};
+const LIMITS = { "Monde": 50 }; // les autres pays : top 10
+
+// ----- AUTH (PKCE, sans secret côté navigateur) -----
+const REDIRECT = location.origin + location.pathname;
+const TOKEN_KEY = "sp_token", VERIFIER_KEY = "sp_verifier";
+
+function rand(len){ const a = new Uint8Array(len); crypto.getRandomValues(a);
+  return Array.from(a, b => ("0"+(b%36).toString(36)).slice(-2)).join("").slice(0,len); }
+async function challenge(v){
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+async function login(){
+  const v = rand(64); sessionStorage.setItem(VERIFIER_KEY, v);
+  const p = new URLSearchParams({ client_id: CLIENT_ID, response_type:"code", redirect_uri: REDIRECT,
+    code_challenge_method:"S256", code_challenge: await challenge(v) });
+  location.href = "https://accounts.spotify.com/authorize?" + p;
+}
+async function handleCallback(){
+  const code = new URLSearchParams(location.search).get("code");
+  if(!code) return false;
+  const body = new URLSearchParams({ client_id: CLIENT_ID, grant_type:"authorization_code", code,
+    redirect_uri: REDIRECT, code_verifier: sessionStorage.getItem(VERIFIER_KEY) });
+  const r = await fetch("https://accounts.spotify.com/api/token", { method:"POST",
+    headers:{"Content-Type":"application/x-www-form-urlencoded"}, body });
+  const j = await r.json();
+  if(j.access_token){
+    localStorage.setItem(TOKEN_KEY, JSON.stringify({ t:j.access_token, exp: Date.now()+j.expires_in*1000 }));
+  }
+  history.replaceState({}, "", REDIRECT);
+  return !!j.access_token;
+}
+function token(){
+  const s = JSON.parse(localStorage.getItem(TOKEN_KEY) || "null");
+  return s && s.exp > Date.now() ? s.t : null;
+}
+
+// ----- DONNÉES -----
+async function fetchTop(playlistId, limit){
+  const r = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=${limit}&market=from_token`,
+    { headers:{ Authorization: "Bearer " + token() } });
+  if(!r.ok) throw new Error(`Spotify ${r.status}`);
+  const j = await r.json();
+  return j.items.map(i => i.track).filter(Boolean).slice(0, limit);
+}
+
+// ----- RENDU -----
+const tabsEl = document.getElementById("tabs");
+const contentEl = document.getElementById("content");
+const audio = document.getElementById("audio");
+const player = document.getElementById("player");
+let currentBtn = null;
+
+function fmtArtists(t){ return t.artists.map(a => a.name).join(", "); }
+
+function render(country, tracks){
+  contentEl.innerHTML = "";
+  if(!tracks.length){ contentEl.innerHTML = `<div class="notice">Aucun titre trouvé.</div>`; return; }
+  tracks.forEach((t, i) => {
+    const img = (t.album.images.find(x => x.width <= 300) || t.album.images[0] || {}).url || "";
+    const row = document.createElement("div");
+    row.className = "track";
+    row.innerHTML = `
+      <div class="rank">${i+1}</div>
+      <img class="cover" src="${img}" alt="" loading="lazy">
+      <div class="info">
+        <div class="name"><a href="${t.external_urls.spotify}" target="_blank" rel="noopener">${escape(t.name)}</a></div>
+        <div class="meta">${escape(fmtArtists(t))} · ${escape(t.album.name)}</div>
+      </div>
+      <button class="play" ${t.preview_url ? "" : "title=\"Extrait indisponible\""}>▶</button>`;
+    const btn = row.querySelector(".play");
+    if(t.preview_url){
+      btn.onclick = () => playPreview(btn, t, img);
+    } else {
+      btn.onclick = () => toggleEmbed(row, t);
+      btn.title = "Écouter dans le lecteur Spotify";
+    }
+    contentEl.appendChild(row);
+  });
+}
+
+function playPreview(btn, t, img){
+  if(currentBtn === btn && !audio.paused){ audio.pause(); btn.textContent="▶"; btn.classList.remove("playing"); return; }
+  if(currentBtn){ currentBtn.textContent="▶"; currentBtn.classList.remove("playing"); }
+  audio.src = t.preview_url; audio.play();
+  btn.textContent="❚❚"; btn.classList.add("playing"); currentBtn = btn;
+  document.getElementById("pCover").src = img;
+  document.getElementById("pName").textContent = t.name;
+  document.getElementById("pArtist").textContent = fmtArtists(t) + " · extrait 30 s";
+  player.classList.add("show");
+}
+document.getElementById("pStop").onclick = () => {
+  audio.pause(); player.classList.remove("show");
+  if(currentBtn){ currentBtn.textContent="▶"; currentBtn.classList.remove("playing"); currentBtn=null; }
+};
+audio.onended = () => document.getElementById("pStop").click();
+
+function toggleEmbed(row, t){
+  const existing = row.nextElementSibling;
+  if(existing && existing.classList.contains("embed")){ existing.remove(); return; }
+  const wrap = document.createElement("div");
+  wrap.className = "embed";
+  wrap.innerHTML = `<iframe src="https://open.spotify.com/embed/track/${t.id}?utm_source=generator" allow="autoplay; encrypted-media" loading="lazy"></iframe>`;
+  row.after(wrap);
+}
+
+function escape(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+async function show(country){
+  [...tabsEl.children].forEach(b => b.classList.toggle("active", b.dataset.c === country));
+  contentEl.innerHTML = `<div class="notice">Chargement…</div>`;
+  try {
+    const tracks = await fetchTop(PLAYLISTS[country], LIMITS[country] || 10);
+    render(country, tracks);
+  } catch(e){
+    contentEl.innerHTML = `<div class="notice">Impossible de charger « ${country} » (${escape(e.message)}).
+      Les playlists éditoriales Spotify ne sont pas toujours accessibles aux nouvelles applications.</div>`;
+  }
+}
+
+// ----- INIT -----
+(async function init(){
+  Object.keys(PLAYLISTS).forEach(c => {
+    const b = document.createElement("button");
+    b.textContent = c; b.dataset.c = c; b.onclick = () => show(c);
+    tabsEl.appendChild(b);
+  });
+  await handleCallback();
+  if(!token()){
+    contentEl.innerHTML = `<div class="login">
+      <p>Connectez-vous avec votre compte Spotify pour charger les classements.</p>
+      <button id="loginBtn">Se connecter à Spotify</button></div>`;
+    document.getElementById("loginBtn").onclick = login;
+    return;
+  }
+  show("Monde");
+})();
+</script>
+</body>
+</html>
