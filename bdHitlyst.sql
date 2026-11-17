@@ -3,9 +3,7 @@ USE BdHitlyst;
 
 CREATE TABLE IF NOT EXISTS Genre (
 	id int auto_increment,
-    pseudo varchar(25),
-    mail varchar(50),
-    motDePasse varchar(50),
+    nom varchar(25),
     PRIMARY KEY (id)
     )ENGINE = InnoDB;
   
