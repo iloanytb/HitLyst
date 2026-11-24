@@ -1,0 +1,1874 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- CSP de défense en profondeur (le serveur envoie aussi ses propres en-têtes) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://itunes.apple.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self'; frame-src https://open.spotify.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+  <title>HitLyst TOP 50 — Le pouls de la musique (Spotify API Live)</title>
+  <!-- Filtrage propre des avertissements de dev CDN en production -->
+  <script>
+    (function(){
+      var _w = console.warn;
+      console.warn = function() {
+        if (arguments[0] && typeof arguments[0] === 'string' && arguments[0].indexOf('cdn.tailwindcss.com') !== -1) return;
+        _w.apply(console, arguments);
+      };
+    })();
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: {
+            hitlyst: {
+              bg: '#0b0f19', surface: '#131a2b', card: '#161e31',
+              cardHover: '#1a2338', border: '#222d47',
+              blue: '#3b82f6', magenta: '#ec4899', coral: '#f97316',
+              spotify: '#1db954', muted: '#94a3b8', subtle: '#64748b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #0b0f19;
+      background-image: radial-gradient(circle at 12% 0%, rgba(59,130,246,0.12) 0%, rgba(236,72,153,0.08) 28%, transparent 58%);
+      color: #fff;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0b0f19; }
+    ::-webkit-scrollbar-thumb { background: #222d47; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334368; }
+
+    .hitlyst-gradient-bg { background: linear-gradient(135deg, #3b82f6 0%, #ec4899 52%, #f97316 100%); }
+    .hitlyst-play-btn {
+      background: linear-gradient(135deg, #ec4899 0%, #f97316 100%);
+      box-shadow: 0 8px 20px -4px rgba(236,72,153,0.45);
+    }
+    .hitlyst-play-btn:hover { box-shadow: 0 10px 24px -2px rgba(249,115,22,0.6); }
+    .hitlyst-gradient-text {
+      background: linear-gradient(135deg, #60a5fa 0%, #ec4899 52%, #fb923c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .podium-first-card {
+      background: radial-gradient(125% 125% at 0% 0%, rgba(236,72,153,0.18) 0%, rgba(59,130,246,0.09) 42%, #131a2b 100%);
+      border-color: rgba(236,72,153,0.38);
+      box-shadow: 0 12px 32px -12px rgba(236,72,153,0.25);
+    }
+    .podium-first-card:hover { border-color: rgba(249,115,22,0.6); }
+
+    @keyframes eqBar { 0%,100% { height: 4px; } 50% { height: 14px; } }
+    .eq-bar-1 { animation: eqBar 0.7s ease-in-out infinite; }
+    .eq-bar-2 { animation: eqBar 0.5s ease-in-out infinite 0.15s; }
+    .eq-bar-3 { animation: eqBar 0.8s ease-in-out infinite 0.3s; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; }
+
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+    .pulse { animation: pulse 2s ease-in-out infinite; }
+
+    @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+    .skeleton {
+      background: linear-gradient(90deg, #161e31 25%, #1a2338 50%, #161e31 75%);
+      background-size: 800px 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+    }
+
+    .toast {
+      position: fixed; top: 72px; right: 16px; z-index: 9999;
+      padding: 10px 16px; border-radius: 14px;
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      backdrop-filter: blur(12px);
+      border: 1px solid;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      transition: opacity 0.3s, transform 0.3s;
+      max-width: 340px;
+    }
+    .toast.success { background: rgba(29,185,84,0.15); border-color: rgba(29,185,84,0.4); color: #1db954; }
+    .toast.error   { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #f87171; }
+    .toast.info    { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.4); color: #60a5fa; }
+    .toast.warning { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.4); color: #fbbf24; }
+    .toast.hide    { opacity: 0; transform: translateX(20px); pointer-events: none; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-[#ec4899] selection:text-white">
+
+  <!-- ==================== HEADER ==================== -->
+  <header class="sticky top-0 z-40 bg-[#0b0f19]/90 backdrop-blur-md border-b border-[#222d47]">
+    <div class="max-w-[1180px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
+
+      <!-- Logo -->
+      <button onclick="resetToWorld()" class="flex items-center gap-2.5 text-left group focus:outline-none" aria-label="HitLyst TOP 50 Accueil">
+        <svg class="h-8 sm:h-9 w-auto group-hover:scale-[1.02] transition-transform" viewBox="0 0 215 74" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="hGH" x1="88" y1="62" x2="195" y2="14" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#3b82f6"/><stop offset="38%" stop-color="#ec4899"/>
+              <stop offset="74%" stop-color="#f43f5e"/><stop offset="100%" stop-color="#f97316"/>
+            </linearGradient>
+            <linearGradient id="hBH" x1="104" y1="36" x2="178" y2="8" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#38bdf8"/><stop offset="48%" stop-color="#ec4899"/>
+              <stop offset="100%" stop-color="#f97316"/>
+            </linearGradient>
+          </defs>
+          <rect x="103" y="21" width="7" height="14" rx="2" fill="url(#hBH)"/>
+          <rect x="114" y="15" width="7" height="22" rx="2" fill="url(#hBH)"/>
+          <path d="M128 36V13H122.5L131.5 3L140.5 13H135V36H128Z" fill="url(#hBH)"/>
+          <path d="M141 11C154.5 11 165.5 21.5 166 34.8L157.5 33.2C156.8 25.5 150 19.5 141 19.5V11Z" fill="url(#hBH)"/>
+          <path d="M141 22.5C148 22.5 153.5 27.5 154.2 33.5L149 32.5C148.3 29.2 145 26.8 141 26.8V22.5Z" fill="url(#hBH)"/>
+          <circle cx="144.5" cy="31" r="3" fill="url(#hBH)"/>
+          <text x="4" y="61" font-family="Inter, sans-serif" font-weight="800" font-size="42" letter-spacing="-1.5" fill="#ffffff" stroke="#2563eb" stroke-width="1.2" paint-order="stroke">Hit</text>
+          <text x="66" y="61" font-family="Inter, sans-serif" font-weight="800" font-size="42" letter-spacing="-1.5" fill="url(#hGH)">Lyst</text>
+        </svg>
+        <span class="text-[9px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full hitlyst-gradient-bg text-white shadow-sm shadow-[#ec4899]/30">TOP 50</span>
+      </button>
+
+      <!-- Nav -->
+      <nav class="hidden md:flex items-center gap-8 text-[13px] font-medium">
+        <button id="nav-classement" onclick="switchTab('classement')" class="text-white relative py-5 transition">
+          Classement
+          <span id="nav-indicator-classement" class="absolute bottom-0 left-0 right-0 h-[2px] hitlyst-gradient-bg rounded-full"></span>
+        </button>
+        <button id="nav-decouvertes" onclick="switchTab('decouvertes')" class="text-slate-400 hover:text-white relative py-5 transition">
+          Découvertes
+          <span id="nav-indicator-decouvertes" class="hidden absolute bottom-0 left-0 right-0 h-[2px] hitlyst-gradient-bg rounded-full"></span>
+        </button>
+        <button id="nav-apropos" onclick="switchTab('apropos')" class="text-slate-400 hover:text-white relative py-5 transition">
+          À propos
+          <span id="nav-indicator-apropos" class="hidden absolute bottom-0 left-0 right-0 h-[2px] hitlyst-gradient-bg rounded-full"></span>
+        </button>
+      </nav>
+
+      <!-- Right: Spotify status + search -->
+      <div class="flex items-center gap-2.5">
+        <!-- Spotify config button with official badge -->
+        <button onclick="openSpotifyModal()" id="spotifyStatusBtn"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1db954]/10 hover:bg-[#1db954]/20 border border-[#1db954]/30 text-xs font-medium transition shrink-0"
+          title="Cliquez pour configurer ou synchroniser l'API Spotify">
+          <svg class="w-3.5 h-3.5 fill-[#1db954]" id="spotifyStatusIcon" viewBox="0 0 24 24">
+            <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+          </svg>
+          <span id="spotifyStatusLabel" class="text-[#1db954] font-medium">Spotify API</span>
+        </button>
+
+        <!-- Search -->
+        <div class="relative w-40 sm:w-60">
+          <svg class="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <input id="searchInput" type="text" placeholder="Titre, artiste..." oninput="handleSearch(this.value)"
+            class="w-full bg-[#131a2b] hover:bg-[#1a2338] focus:bg-[#1a2338] text-xs text-white placeholder-slate-500 pl-8 pr-7 py-2 rounded-full border border-[#222d47] focus:border-[#ec4899]/60 focus:outline-none transition" />
+          <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs p-1" title="Effacer">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile nav -->
+    <div class="flex md:hidden border-t border-[#222d47] px-4 py-2 justify-around text-xs font-medium bg-[#0b0f19]">
+      <button onclick="switchTab('classement')" id="m-nav-classement" class="text-[#ec4899] font-semibold py-1">Classement</button>
+      <button onclick="switchTab('decouvertes')" id="m-nav-decouvertes" class="text-slate-400 py-1">Découvertes</button>
+      <button onclick="switchTab('apropos')" id="m-nav-apropos" class="text-slate-400 py-1">À propos</button>
+    </div>
+  </header>
+
+  <!-- ==================== VIEW: CLASSEMENT ==================== -->
+  <main id="view-classement" class="flex-1 max-w-[1180px] w-full mx-auto px-4 sm:px-8 pt-8 sm:pt-12 pb-24">
+
+    <!-- HERO -->
+    <section class="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 sm:pb-10 border-b border-[#222d47]">
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <p class="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.16em] hitlyst-gradient-text inline-block">LE POULS DE LA MUSIQUE</p>
+          <span class="text-[9px] font-semibold uppercase px-2 py-0.5 rounded-full bg-[#1db954]/15 text-[#1db954] border border-[#1db954]/30">Pochettes officielles HD</span>
+        </div>
+        <h1 id="heroTitle" class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-[1.1]">Le monde sur écoute.</h1>
+        <p id="heroSubtitle" class="text-slate-400 text-xs sm:text-sm mt-3 font-normal max-w-xl">Les 50 titres les plus populaires avec classement dynamique et pochettes d'albums officielles.</p>
+      </div>
+      <div class="md:text-right shrink-0">
+        <p id="heroEditionTag" class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">ÉDITION MONDIALE</p>
+        <p id="heroEditionTitle" class="text-sm sm:text-base font-semibold text-slate-200">Les records du streaming.</p>
+        <p id="heroDataInfo" class="text-[11px] text-[#1db954] mt-0.5 flex items-center md:justify-end gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#1db954]"></span>
+          <span id="heroDataText">Alimenté par l'API Spotify</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- PODIUM -->
+    <section id="podiumSection" class="pt-8 pb-10 border-b border-[#222d47]">
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-6">
+        <div>
+          <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-[#ec4899] mb-1">EN HAUT DE L'AFFICHE</p>
+          <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-white">Le trio de tête</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <p id="podiumSourceLabel" class="text-xs text-slate-400">Pochettes d'albums originales & extraits audio</p>
+          <button id="refreshBtn" onclick="refreshCurrentRegion()" title="Actualiser le classement depuis Spotify"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black text-xs font-bold transition shadow-md shadow-[#1db954]/20">
+            <svg id="refreshIcon" class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            <span id="refreshLabel">Actualiser Spotify</span>
+          </button>
+        </div>
+      </div>
+      <div id="podiumGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+        <!-- Dynamique -->
+      </div>
+      <p id="podiumNote" class="text-[10px] text-slate-500 mt-3.5 flex items-center gap-1.5">
+        <svg class="w-3 h-3 fill-[#1db954]" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        Pochettes d'albums fournies par Spotify Web API. Données synchronisées.
+      </p>
+    </section>
+
+    <!-- CHART TABLE -->
+    <section class="pt-8">
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 id="chartTitle" class="text-xl sm:text-2xl font-bold tracking-tight text-white">Le Top 50 mondial</h2>
+          <p id="chartSubtitle" class="text-xs text-slate-400 mt-1">Classé par popularité et écoutes, avec pochettes officielles et extraits audio.</p>
+        </div>
+        <span id="chartBadge" class="self-start text-[10px] font-semibold uppercase tracking-[0.12em] text-[#1db954] bg-[#1db954]/10 border border-[#1db954]/30 px-3 py-1.5 rounded-full shrink-0">SPOTIFY TOP 50</span>
+      </div>
+
+      <!-- Controls bar -->
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+        <div class="flex flex-wrap items-center gap-2.5">
+          <button id="btnModeWorld" onclick="selectRegion('world')"
+            class="px-4 py-2 rounded-full text-xs font-semibold transition flex items-center gap-2 bg-[#ec4899]/15 text-[#f472b6] border border-[#ec4899]/45">
+            Monde : Top 50
+          </button>
+          <button id="btnModeCountry" onclick="activateCountryMode()"
+            class="px-4 py-2 rounded-full text-xs font-medium transition flex items-center gap-2 bg-[#131a2b] text-slate-400 hover:text-white border border-[#222d47]">
+            Par pays
+          </button>
+
+          <!-- Country dropdown -->
+          <div class="relative" id="countryDropdownContainer">
+            <button id="countryDropdownBtn" onclick="toggleCountryDropdown(event)" aria-haspopup="listbox" aria-expanded="false"
+              class="px-4 py-2 rounded-full text-xs font-medium bg-[#131a2b] hover:bg-[#1a2338] text-slate-300 border border-[#222d47] flex items-center gap-3 min-w-[165px] justify-between transition">
+              <span id="countryDropdownLabel" class="flex items-center gap-2">Choisir un pays</span>
+              <svg id="countryChevron" class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div id="countryDropdownMenu" role="listbox"
+              class="hidden absolute left-0 mt-2 w-56 rounded-2xl bg-[#131a2b] border border-[#222d47] shadow-2xl shadow-black/90 py-1.5 z-30 overflow-hidden">
+              <div class="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Sélectionner un territoire</div>
+              <button onclick="selectRegion('world')" data-region="world" class="country-option w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between hover:bg-white/[0.06] text-slate-300 transition">
+                <span class="flex items-center gap-2.5"><span class="text-sm">🌍</span><span>Monde - Top 50</span></span>
+                <span class="check-icon text-[#ec4899] font-bold">✓</span>
+              </button>
+              <div class="my-1 border-t border-[#222d47]"></div>
+              <button onclick="selectRegion('france')" data-region="france" class="country-option w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between hover:bg-white/[0.06] text-slate-300 transition">
+                <span class="flex items-center gap-2.5"><span class="text-sm">🇫🇷</span><span>France</span></span>
+                <span class="check-icon hidden text-[#ec4899] font-bold">✓</span>
+              </button>
+              <button onclick="selectRegion('italie')" data-region="italie" class="country-option w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between hover:bg-white/[0.06] text-slate-300 transition">
+                <span class="flex items-center gap-2.5"><span class="text-sm">🇮🇹</span><span>Italie</span></span>
+                <span class="check-icon hidden text-[#ec4899] font-bold">✓</span>
+              </button>
+              <button onclick="selectRegion('etats-unis')" data-region="etats-unis" class="country-option w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between hover:bg-white/[0.06] text-slate-300 transition">
+                <span class="flex items-center gap-2.5"><span class="text-sm">🇺🇸</span><span>États-Unis</span></span>
+                <span class="check-icon hidden text-[#ec4899] font-bold">✓</span>
+              </button>
+              <button onclick="selectRegion('allemagne')" data-region="allemagne" class="country-option w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between hover:bg-white/[0.06] text-slate-300 transition">
+                <span class="flex items-center gap-2.5"><span class="text-sm">🇩🇪</span><span>Allemagne</span></span>
+                <span class="check-icon hidden text-[#ec4899] font-bold">✓</span>
+              </button>
+              <button onclick="selectRegion('espagne')" data-region="espagne" class="country-option w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between hover:bg-white/[0.06] text-slate-300 transition">
+                <span class="flex items-center gap-2.5"><span class="text-sm">🇪🇸</span><span>Espagne</span></span>
+                <span class="check-icon hidden text-[#ec4899] font-bold">✓</span>
+              </button>
+            </div>
+          </div>
+          <span id="scopeCaption" class="text-[11px] text-slate-500 ml-1">50 titres synchronisés depuis Spotify</span>
+        </div>
+        <div class="flex items-center gap-2 text-[11px] text-slate-500">
+          <span id="countBadge" class="font-semibold text-slate-300">50 titres</span>
+          <span>·</span>
+          <span id="sourceInfo" class="text-[#1db954] flex items-center gap-1">
+            <svg class="w-3 h-3 fill-current inline" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+            Pochettes HD chargées
+          </span>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-[#131a2b] border border-[#222d47] rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-[#222d47] text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 bg-[#161e31]">
+                <th class="py-3.5 pl-5 pr-3 w-12">#</th>
+                <th class="py-3.5 px-3">TITRE / ARTISTE</th>
+                <th class="py-3.5 px-3 hidden md:table-cell">ALBUM</th>
+                <th class="py-3.5 px-3 text-right cursor-pointer hover:text-slate-300 select-none transition" onclick="toggleSortOrder()" title="Trier">
+                  <span class="inline-flex items-center justify-end gap-1">
+                    ÉCOUTES / POPULARITÉ
+                    <span id="sortArrow" class="text-[#ec4899]">↓</span>
+                  </span>
+                </th>
+                <th class="py-3.5 px-3 text-right hidden sm:table-cell w-20">SORTIE</th>
+                <th class="py-3.5 pl-3 pr-5 text-right w-24">
+                  <span class="inline-flex items-center justify-end gap-3">
+                    <svg class="w-3.5 h-3.5 hidden sm:inline text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="9"></circle><path stroke-linecap="round" d="M12 7v5l3 2"></path>
+                    </svg>
+                    <span class="w-7">ACTION</span>
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="chartTableBody" class="divide-y divide-[#222d47]/70 text-xs sm:text-[13px]"></tbody>
+          </table>
+        </div>
+        <div id="emptySearchState" class="hidden py-16 px-4 text-center">
+          <p class="text-slate-400 text-sm font-medium">Aucun titre ou artiste ne correspond à votre recherche.</p>
+          <button onclick="clearSearch()" class="mt-3 text-xs text-[#ec4899] hover:underline">Réinitialiser le filtre</button>
+        </div>
+        <!-- Loading skeleton -->
+        <div id="loadingSkeleton" class="hidden p-6 space-y-3">
+          <div class="text-center text-xs text-slate-400 mb-4 flex items-center justify-center gap-2">
+            <svg class="w-4 h-4 fill-current text-[#1db954] spin" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <span>Synchronisation avec l'API Spotify en cours...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-4 text-[11px] text-slate-500 px-1">
+        <p id="tableFooterLeft">50 titres classés avec pochettes synchronisées depuis l'API Spotify.</p>
+        <p id="tableFooterRight" class="font-medium text-slate-400">50 / 50 titres</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== VIEW: DÉCOUVERTES ==================== -->
+  <section id="view-decouvertes" class="hidden flex-1 max-w-[1180px] w-full mx-auto px-4 sm:px-8 pt-12 pb-24">
+    <div class="pb-8 border-b border-[#222d47]">
+      <p class="text-[11px] font-bold uppercase tracking-[0.16em] hitlyst-gradient-text inline-block mb-2">ANALYSE & TENDANCES</p>
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">Découvertes & Comparateur</h1>
+      <p class="text-slate-400 text-sm mt-2">Explorez les particularités musicales des 5 marchés disponibles dans HitLyst.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-8">
+      <div onclick="jumpToCountryFromDiscover('france')" class="cursor-pointer bg-[#131a2b] hover:bg-[#1a2338] border border-[#222d47] hover:border-[#ec4899]/50 rounded-2xl p-6 transition group">
+        <div class="flex items-center justify-between mb-4"><span class="text-2xl">🇫🇷</span><span class="text-[10px] font-bold uppercase tracking-wider text-[#f472b6] bg-[#ec4899]/15 px-2.5 py-1 rounded-full">Top France</span></div>
+        <h3 class="text-lg font-bold text-white group-hover:text-[#ec4899] transition">France</h3>
+        <p class="text-xs text-slate-400 mt-1">Playlist officielle Spotify : Top 50 France</p>
+        <p class="text-[11px] text-slate-500 mt-3">Cliquez pour basculer sur les classements et pochettes de l'édition française.</p>
+      </div>
+      <div onclick="jumpToCountryFromDiscover('italie')" class="cursor-pointer bg-[#131a2b] hover:bg-[#1a2338] border border-[#222d47] hover:border-[#ec4899]/50 rounded-2xl p-6 transition group">
+        <div class="flex items-center justify-between mb-4"><span class="text-2xl">🇮🇹</span><span class="text-[10px] font-bold uppercase tracking-wider text-[#f472b6] bg-[#ec4899]/15 px-2.5 py-1 rounded-full">Top Italie</span></div>
+        <h3 class="text-lg font-bold text-white group-hover:text-[#ec4899] transition">Italie</h3>
+        <p class="text-xs text-slate-400 mt-1">Playlist officielle Spotify : Top 50 Italy</p>
+        <p class="text-[11px] text-slate-500 mt-3">Cliquez pour explorer les hits et covers plébiscités en Italie.</p>
+      </div>
+      <div onclick="jumpToCountryFromDiscover('etats-unis')" class="cursor-pointer bg-[#131a2b] hover:bg-[#1a2338] border border-[#222d47] hover:border-[#ec4899]/50 rounded-2xl p-6 transition group">
+        <div class="flex items-center justify-between mb-4"><span class="text-2xl">🇺🇸</span><span class="text-[10px] font-bold uppercase tracking-wider text-[#f472b6] bg-[#ec4899]/15 px-2.5 py-1 rounded-full">Top USA</span></div>
+        <h3 class="text-lg font-bold text-white group-hover:text-[#ec4899] transition">États-Unis</h3>
+        <p class="text-xs text-slate-400 mt-1">Playlist officielle Spotify : Top 50 USA</p>
+        <p class="text-[11px] text-slate-500 mt-3">Les plus gros volumes de streaming d'Amérique du Nord.</p>
+      </div>
+      <div onclick="jumpToCountryFromDiscover('allemagne')" class="cursor-pointer bg-[#131a2b] hover:bg-[#1a2338] border border-[#222d47] hover:border-[#ec4899]/50 rounded-2xl p-6 transition group">
+        <div class="flex items-center justify-between mb-4"><span class="text-2xl">🇩🇪</span><span class="text-[10px] font-bold uppercase tracking-wider text-[#f472b6] bg-[#ec4899]/15 px-2.5 py-1 rounded-full">Top Allemagne</span></div>
+        <h3 class="text-lg font-bold text-white group-hover:text-[#ec4899] transition">Allemagne</h3>
+        <p class="text-xs text-slate-400 mt-1">Playlist officielle Spotify : Top 50 Germany</p>
+        <p class="text-[11px] text-slate-500 mt-3">Le marché allemand et ses titres leaders.</p>
+      </div>
+      <div onclick="jumpToCountryFromDiscover('espagne')" class="cursor-pointer bg-[#131a2b] hover:bg-[#1a2338] border border-[#222d47] hover:border-[#ec4899]/50 rounded-2xl p-6 transition group">
+        <div class="flex items-center justify-between mb-4"><span class="text-2xl">🇪🇸</span><span class="text-[10px] font-bold uppercase tracking-wider text-[#f472b6] bg-[#ec4899]/15 px-2.5 py-1 rounded-full">Top Espagne</span></div>
+        <h3 class="text-lg font-bold text-white group-hover:text-[#ec4899] transition">Espagne</h3>
+        <p class="text-xs text-slate-400 mt-1">Playlist officielle Spotify : Top 50 Spain</p>
+        <p class="text-[11px] text-slate-500 mt-3">Les titres hispaniques et internationaux au sommet.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VIEW: À PROPOS ==================== -->
+  <section id="view-apropos" class="hidden flex-1 max-w-[820px] w-full mx-auto px-4 sm:px-8 pt-12 pb-24">
+    <div class="pb-8 border-b border-[#222d47]">
+      <p class="text-[11px] font-bold uppercase tracking-[0.16em] hitlyst-gradient-text inline-block mb-2">À PROPOS DE HITLYST</p>
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">Le pouls de la musique mondiale.</h1>
+    </div>
+    <div class="space-y-5 mt-8 text-sm text-slate-300 leading-relaxed">
+      <p><strong class="text-white">HitLyst TOP 50</strong> est synchronisé directement avec l'<strong>API Web de Spotify</strong> pour extraire en temps réel le classement officiel des 50 titres les plus écoutés (Top 50 Mondial et Top 50 par pays : France, États-Unis, Italie, Allemagne, Espagne).</p>
+      
+      <div class="bg-[#131a2b] border border-[#222d47] rounded-2xl p-5 space-y-3">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-[#1db954] flex items-center gap-2">
+          <svg class="w-4 h-4 fill-[#1db954]" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+          Mentions légales & Utilisation de l'API Spotify
+        </h2>
+        <p class="text-xs text-slate-400">
+          Ce site utilise l'API Web officielle de Spotify dans le respect des <em>Spotify Developer Terms of Service</em>. Les métadonnées, titres et visuels de pochettes d'albums proviennent des serveurs officiels Spotify (<code class="text-slate-300">i.scdn.co</code>). Chaque morceau contient un lien direct pour l'écouter dans Spotify ainsi qu'un lecteur d'extrait sonore.
+        </p>
+      </div>
+
+      <div class="bg-[#131a2b] border border-[#222d47] rounded-2xl p-5 space-y-2">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-[#ec4899]">Est-il obligatoire de mentionner Spotify ?</h2>
+        <p class="text-xs text-slate-400">
+          <strong>Oui</strong>, les conditions d'utilisation développeur de Spotify (<em>Spotify Brand Guidelines</em>) exigent expressément que toute application affichant du contenu issu de son catalogue crédite Spotify (logo ou mention « Powered by Spotify ») et fournisse un lien vers le contenu officiel. HitLyst respecte l'ensemble de ces prérequis.
+        </p>
+      </div>
+
+      <button onclick="switchTab('classement')" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full hitlyst-gradient-bg text-white font-semibold text-xs hover:brightness-110 transition shadow-lg shadow-[#ec4899]/25">
+        ← Retourner au classement
+      </button>
+    </div>
+  </section>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="border-t border-[#222d47] bg-[#0b0f19] py-10 mt-auto">
+    <div class="max-w-[1180px] mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+      <div class="space-y-2">
+        <div class="flex items-center gap-3.5">
+          <svg class="h-7 w-auto" viewBox="0 0 215 74" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="hGF" x1="88" y1="62" x2="195" y2="14" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#3b82f6"/><stop offset="38%" stop-color="#ec4899"/>
+                <stop offset="74%" stop-color="#f43f5e"/><stop offset="100%" stop-color="#f97316"/>
+              </linearGradient>
+              <linearGradient id="hBF" x1="104" y1="36" x2="178" y2="8" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#38bdf8"/><stop offset="48%" stop-color="#ec4899"/>
+                <stop offset="100%" stop-color="#f97316"/>
+              </linearGradient>
+            </defs>
+            <rect x="103" y="21" width="7" height="14" rx="2" fill="url(#hBF)"/>
+            <rect x="114" y="15" width="7" height="22" rx="2" fill="url(#hBF)"/>
+            <path d="M128 36V13H122.5L131.5 3L140.5 13H135V36H128Z" fill="url(#hBF)"/>
+            <path d="M141 11C154.5 11 165.5 21.5 166 34.8L157.5 33.2C156.8 25.5 150 19.5 141 19.5V11Z" fill="url(#hBF)"/>
+            <path d="M141 22.5C148 22.5 153.5 27.5 154.2 33.5L149 32.5C148.3 29.2 145 26.8 141 26.8V22.5Z" fill="url(#hBF)"/>
+            <circle cx="144.5" cy="31" r="3" fill="url(#hBF)"/>
+            <text x="4" y="61" font-family="Inter, sans-serif" font-weight="800" font-size="42" letter-spacing="-1.5" fill="#ffffff" stroke="#2563eb" stroke-width="1.2" paint-order="stroke">Hit</text>
+            <text x="66" y="61" font-family="Inter, sans-serif" font-weight="800" font-size="42" letter-spacing="-1.5" fill="url(#hGF)">Lyst</text>
+          </svg>
+          <span class="text-xs text-slate-500">La musique change. Restez dans le rythme.</span>
+        </div>
+        <p class="text-[11px] text-slate-600 leading-relaxed">
+          Pochettes d'albums et métadonnées fournies par Spotify Web API.
+        </p>
+      </div>
+      <div class="sm:text-right space-y-2">
+        <div class="flex items-center sm:justify-end gap-5 text-xs text-slate-400">
+          <button onclick="switchTab('apropos')" class="hover:text-white transition">À propos</button>
+          <button onclick="openSpotifyModal()" class="text-[#1db954] hover:underline transition">Statut API</button>
+          <button onclick="openPrivacyModal()" class="hover:text-white transition">Confidentialité</button>
+        </div>
+        <p class="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-600 flex items-center sm:justify-end gap-1.5">
+          <svg class="w-3.5 h-3.5 fill-[#1db954]" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+          POWERED BY SPOTIFY WEB API
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==================== MINI PLAYER ==================== -->
+  <div id="miniPlayer" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-[820px] bg-[#131a2b]/95 backdrop-blur-xl border border-[#222d47] rounded-2xl px-4 py-3 shadow-2xl shadow-black">
+    <audio id="htmlAudioPlayer" preload="none" crossorigin="anonymous"></audio>
+    <div class="flex items-center justify-between gap-3 sm:gap-4">
+      <div class="flex items-center gap-3 min-w-0 flex-1">
+        <div id="playerCover" class="w-11 h-11 rounded-lg shrink-0 overflow-hidden border border-white/10 bg-[#0b0f19]"></div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <p id="playerTitle" class="text-xs sm:text-sm font-bold text-white truncate">Titre</p>
+            <span class="flex items-end gap-0.5 h-3 shrink-0" id="playerEq">
+              <span class="w-0.5 bg-[#3b82f6] rounded-full eq-bar-1"></span>
+              <span class="w-0.5 bg-[#ec4899] rounded-full eq-bar-2"></span>
+              <span class="w-0.5 bg-[#f97316] rounded-full eq-bar-3"></span>
+            </span>
+          </div>
+          <div class="flex items-center gap-2 mt-0.5">
+            <p id="playerArtist" class="text-[11px] text-slate-400 truncate">Artiste</p>
+            <span id="playerSourceBadge" class="hidden sm:inline-block text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-slate-400 shrink-0"></span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <button onclick="playAdjacentTrack(-1)" class="w-8 h-8 rounded-full hover:bg-white/[0.06] text-slate-300 hover:text-white flex items-center justify-center transition" title="Piste précédente">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button onclick="togglePlayPause()" id="playerPlayPauseBtn" class="w-9 h-9 rounded-full hitlyst-play-btn hover:brightness-110 text-white flex items-center justify-center transition">
+          <svg id="iconPause" class="w-4 h-4 fill-current" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+          <svg id="iconPlay" class="w-4 h-4 fill-current hidden ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button onclick="playAdjacentTrack(1)" class="w-8 h-8 rounded-full hover:bg-white/[0.06] text-slate-300 hover:text-white flex items-center justify-center transition" title="Piste suivante">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        </button>
+        <div class="hidden md:flex flex-col items-end w-32 ml-1">
+          <div onclick="seekAudio(event)" class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden cursor-pointer">
+            <div id="playerProgress" class="h-full hitlyst-gradient-bg w-0 transition-all duration-150"></div>
+          </div>
+          <span id="playerTime" class="text-[10px] text-slate-500 mt-1 tabular-nums">0:00 / 0:30</span>
+        </div>
+        <div class="hidden sm:flex items-center gap-1.5 ml-1">
+          <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07"/>
+          </svg>
+          <input id="volumeSlider" type="range" min="0" max="100" value="75" oninput="updateVolume(this.value)" class="w-16 accent-[#ec4899] h-1 bg-slate-700 rounded-lg cursor-pointer">
+        </div>
+        <a id="playerSpotifyDirectLink" href="#" target="_blank" rel="noopener noreferrer" title="Écouter dans Spotify"
+          class="hidden sm:flex items-center justify-center w-7 h-7 rounded-full bg-[#1db954]/20 hover:bg-[#1db954]/30 text-[#1db954] transition ml-1">
+          <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        </a>
+        <button onclick="closePlayer()" class="text-slate-500 hover:text-white p-1.5 text-xs ml-1">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TRACK DETAIL MODAL ==================== -->
+  <div id="detailModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" onclick="closeModalOnBackdrop(event)">
+    <div class="bg-[#131a2b] border border-[#222d47] rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+      <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-500 hover:text-white w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center transition">✕</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <!-- ==================== SPOTIFY STATUS MODAL ==================== -->
+  <div id="spotifyModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onclick="closeSpotifyModalOnBackdrop(event)">
+    <div class="bg-[#131a2b] border border-[#222d47] rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+      <button onclick="closeSpotifyModal()" class="absolute top-4 right-4 text-slate-500 hover:text-white w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center transition">✕</button>
+
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-10 h-10 rounded-xl bg-[#1db954]/20 border border-[#1db954]/40 flex items-center justify-center">
+          <svg class="w-6 h-6 fill-current text-[#1db954]" viewBox="0 0 24 24"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Connexion Spotify Web API</h3>
+          <p class="text-xs text-slate-400">Classement live & pochettes d'albums officielles</p>
+        </div>
+      </div>
+
+      <div class="bg-[#0b0f19] border border-[#1db954]/25 rounded-xl p-3.5 mb-4 text-[11px] text-slate-400 space-y-1.5">
+        <p class="font-semibold text-slate-200 text-xs">🔒 Connexion sécurisée</p>
+        <p>Les identifiants Spotify (Client ID et Client Secret) ne sont plus présents dans cette page. Ils sont lus par le <strong class="text-slate-300">serveur</strong> depuis des variables d'environnement et ne transitent jamais jusqu'au navigateur.</p>
+        <p class="text-slate-500">Aucune clé n'est stockée dans le navigateur ni transmise à un proxy tiers. Configuration : voir <code class="text-slate-300">README-SECURITE.md</code>.</p>
+      </div>
+
+      <div class="bg-[#0b0f19] border border-[#222d47] rounded-xl p-3 text-[11px] text-slate-400 space-y-1">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-slate-300">Statut :</span>
+          <span id="modalTokenStatus" class="text-slate-500">Vérification...</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-slate-300">Données en cache :</span>
+          <span id="modalCacheCount" class="text-[#1db954] font-bold">50</span>
+        </div>
+      </div>
+
+      <div id="modalFeedback" class="hidden px-3 py-2.5 rounded-xl text-xs font-medium"></div>
+
+      <div class="flex items-center justify-between pt-4">
+        <button onclick="clearCache()" class="text-[11px] text-slate-500 hover:text-rose-400 transition underline">Vider le cache local</button>
+        <div class="flex gap-2">
+          <button onclick="closeSpotifyModal()" class="px-4 py-2 rounded-full text-xs text-slate-400 hover:text-white transition">Fermer</button>
+          <button id="btnSaveSpotify" onclick="testServerConnection()"
+            class="px-5 py-2.5 rounded-full bg-[#1db954] hover:bg-[#1ed760] text-black font-bold text-xs flex items-center gap-2 transition shadow-lg shadow-[#1db954]/25">
+            <span id="saveBtnIcon">🔍</span>
+            <span id="saveBtnLabel">Tester la connexion</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== JAVASCRIPT ==================== -->
+  <script>
+    // =========================================================
+    // CONFIGURATION SÉCURISÉE
+    // =========================================================
+    // Aucune clé n'est présente dans ce fichier. Les identifiants Spotify sont
+    // conservés sur le serveur (voir api/spotify.php et private/spotify-config.php).
+    // Le navigateur appelle uniquement api/spotify.php, de même origine.
+    const SPOTIFY_ENDPOINT = 'api/spotify.php';
+
+    function spotifyApiUrl(action, params = {}) {
+      const url = new URL(SPOTIFY_ENDPOINT, window.location.href);
+      url.searchParams.set('action', action);
+      Object.keys(params).forEach(key => url.searchParams.set(key, params[key]));
+      return url.toString();
+    }
+
+    // =========================================================
+    // 50 MORCEAUX DU TOP 50 AVEC LEURS POCHETTES OFFICIELLES SPOTIFY CDN DIRECTES
+    // (Visibles immédiatement dès l'ouverture de la page sans aucun clic !)
+    // =========================================================
+    const DEMO_WORLD = [
+      { rank:1,  title:"Blinding Lights",   artist:"The Weeknd",            album:"After Hours",                    streams:4900000000, year:2019, duration:"3:20", art:"blinding", coverUrl:"https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" },
+      { rank:2,  title:"Sunflower",          artist:"Post Malone, Swae Lee", album:"Spider-Man: Into the Spider-Verse", streams:4717263410, year:2018, duration:"2:38", art:"sunflower", coverUrl:"https://i.scdn.co/image/ab67616d0000b273e2e352d89826aef6dbd5ff8f" },
+      { rank:3,  title:"As It Was",          artist:"Harry Styles",          album:"Harry's House",                  streams:4541388412, year:2022, duration:"2:47", art:"asitwas", coverUrl:"https://i.scdn.co/image/ab67616d0000b2732e8f6fb74623f3775a057495" },
+      { rank:4,  title:"Heat Waves",         artist:"Glass Animals",         album:"Dreamland",                      streams:4372683884, year:2020, duration:"3:58", art:"heatwaves", coverUrl:"https://i.scdn.co/image/ab67616d0000b2739e495fb707973f3390850eea" },
+      { rank:5,  title:"Cruel Summer",       artist:"Taylor Swift",          album:"Lover",                          streams:4203992576, year:2019, duration:"2:58", art:"cruel", coverUrl:"https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" },
+      { rank:6,  title:"Flowers",            artist:"Miley Cyrus",           album:"Endless Summer Vacation",        streams:4052606756, year:2023, duration:"3:20", art:"flowers", coverUrl:"https://i.scdn.co/image/ab67616d0000b273f429549123dbe8552764ba1d" },
+      { rank:7,  title:"Another Love",       artist:"Tom Odell",             album:"Long Way Down",                  streams:3901036813, year:2012, duration:"4:04", art:"anotherlove", coverUrl:"https://i.scdn.co/image/ab67616d0000b27319bc5a4f4d2f0eb305c742c0" },
+      { rank:8,  title:"Sweater Weather",    artist:"The Neighbourhood",     album:"I Love You.",                    streams:3755531725, year:2012, duration:"4:00", art:"sweater", coverUrl:"https://i.scdn.co/image/ab67616d0000b2738265a736a1eb838ad5a9b9a8" },
+      { rank:9,  title:"Save Your Tears",    artist:"The Weeknd",            album:"After Hours",                    streams:3615516248, year:2020, duration:"3:35", art:"blinding", coverUrl:"https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" },
+      { rank:10, title:"Levitating",         artist:"Dua Lipa",              album:"Future Nostalgia",               streams:3480706203, year:2020, duration:"3:23", art:"neon", coverUrl:"https://i.scdn.co/image/ab67616d0000b273bd26ede1ae69327010d49946" },
+      { rank:11, title:"Kill Bill",          artist:"SZA",                   album:"SOS",                            streams:3350920605, year:2022, duration:"2:33", art:"ocean", coverUrl:"https://i.scdn.co/image/ab67616d0000b2730c471c36970b94093ed7fed7" },
+      { rank:12, title:"Do I Wanna Know?",   artist:"Arctic Monkeys",        album:"AM",                             streams:3225974913, year:2013, duration:"4:32", art:"mono", coverUrl:"https://i.scdn.co/image/ab67616d0000b2734ae1c4c5c45aabe5aec872c0" },
+      { rank:13, title:"Too Sweet",          artist:"Hozier",                album:"Unheard",                        streams:3105841822, year:2024, duration:"4:11", art:"amber", coverUrl:"https://i.scdn.co/image/ab67616d0000b2739b6b77134371fa4f971c045b" },
+      { rank:14, title:"FE!N",              artist:"Travis Scott, Playboi Carti", album:"UTOPIA",                   streams:2989656637, year:2023, duration:"3:11", art:"mono", coverUrl:"https://i.scdn.co/image/ab67616d0000b2738b52c6b9bc4e43d873869699" },
+      { rank:15, title:"Die With A Smile",   artist:"Lady Gaga, Bruno Mars", album:"Die With A Smile",               streams:2878401767, year:2024, duration:"4:11", art:"diewithasmile", coverUrl:"https://i.scdn.co/image/ab67616d0000b2732e02117d768ee9e14a554aef" },
+      { rank:16, title:"BIRDS OF A FEATHER", artist:"Billie Eilish",         album:"HIT ME HARD AND SOFT",           streams:2771294692, year:2024, duration:"3:30", art:"ocean", coverUrl:"https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62" },
+      { rank:17, title:"Espresso",           artist:"Sabrina Carpenter",     album:"Short n' Sweet",                 streams:2667749425, year:2024, duration:"2:55", art:"espresso", coverUrl:"https://i.scdn.co/image/ab67616d0000b273659e0e35109664f9f2c17442" },
+      { rank:18, title:"Beautiful Things",   artist:"Benson Boone",          album:"Fireworks & Rollerblades",       streams:2568276890, year:2024, duration:"3:00", art:"amber", coverUrl:"https://i.scdn.co/image/ab67616d0000b2738ea0be68d904724a737f9994" },
+      { rank:19, title:"Lose Control",       artist:"Teddy Swims",           album:"I've Tried Everything But Therapy", streams:2473910402, year:2024, duration:"3:30", art:"crimson", coverUrl:"https://i.scdn.co/image/ab67616d0000b273e34b9d05e26325983693309a" },
+      { rank:20, title:"Good Luck, Babe!",   artist:"Chappell Roan",         album:"Good Luck, Babe!",               streams:2380320489, year:2024, duration:"3:38", art:"cruel", coverUrl:"https://i.scdn.co/image/ab67616d0000b273a218f267a5fa0ce7069c9b68" },
+      { rank:21, title:"Please Please Please",artist:"Sabrina Carpenter",    album:"Short n' Sweet",                 streams:2291845482, year:2024, duration:"3:06", art:"espresso", coverUrl:"https://i.scdn.co/image/ab67616d0000b273659e0e35109664f9f2c17442" },
+      { rank:22, title:"A Bar Song (Tipsy)", artist:"Shaboozey",             album:"Where I've Been, Isn't Where I'm Going", streams:2206116734, year:2024, duration:"2:51", art:"amber", coverUrl:"https://i.scdn.co/image/ab67616d0000b27395029e71ec50efea0fa2ab88" },
+      { rank:23, title:"End of Beginning",   artist:"Djo",                   album:"DECIDE",                         streams:2123890037, year:2024, duration:"2:39", art:"neon", coverUrl:"https://i.scdn.co/image/ab67616d0000b2733f1f31f8f30ecb2938ad7916" },
+      { rank:24, title:"we can't be friends (wait for your love)", artist:"Ariana Grande", album:"eternal sunshine",  streams:2044687342, year:2024, duration:"3:48", art:"crimson", coverUrl:"https://i.scdn.co/image/ab67616d0000b2730da4f0d6118d0b28e67f70b0" },
+      { rank:25, title:"I Had Some Help",    artist:"Post Malone, Morgan Wallen", album:"F-1 Trillion",             streams:1968427962, year:2024, duration:"2:58", art:"amber", coverUrl:"https://i.scdn.co/image/ab67616d0000b273dfc5885f096235b3e2a938c5" },
+      { rank:26, title:"Not Like Us",        artist:"Kendrick Lamar",        album:"Not Like Us",                    streams:1895031015, year:2024, duration:"4:34", art:"crimson", coverUrl:"https://i.scdn.co/image/ab67616d0000b2731ea0c62b2339cbf493a999ad" },
+      { rank:27, title:"LUNCH",              artist:"Billie Eilish",         album:"HIT ME HARD AND SOFT",           streams:1824370681, year:2024, duration:"2:59", art:"ocean", coverUrl:"https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62" },
+      { rank:28, title:"Fortnight",          artist:"Taylor Swift, Post Malone", album:"THE TORTURED POETS DEPARTMENT", streams:1756348457, year:2024, duration:"3:48", art:"mono", coverUrl:"https://i.scdn.co/image/ab67616d0000b27385077227d89617d3d758c0a8" },
+      { rank:29, title:"greedy",             artist:"Tate McRae",            album:"THINK LATER",                    streams:1690855833, year:2023, duration:"2:11", art:"crimson", coverUrl:"https://i.scdn.co/image/ab67616d0000b27322bf20640103632cf4b9ee57" },
+      { rank:30, title:"Lovin On Me",        artist:"Jack Harlow",           album:"Lovin On Me",                    streams:1627899433, year:2023, duration:"2:18", art:"neon", coverUrl:"https://i.scdn.co/image/ab67616d0000b273f39a067ffbe6164f26b52701" },
+      { rank:31, title:"Paint The Town Red", artist:"Doja Cat",              album:"Scarlet",                        streams:1567113307, year:2023, duration:"3:51", art:"crimson", coverUrl:"https://i.scdn.co/image/ab67616d0000b27372a77d0387db77918ee9f14c" },
+      { rank:32, title:"One Of The Girls",   artist:"The Weeknd, JENNIE, Lily-Rose Depp", album:"The Idol Episode 4", streams:1508680184, year:2023, duration:"4:04", art:"neon", coverUrl:"https://i.scdn.co/image/ab67616d0000b273b0dd6a5cd1dec96c4119c262" },
+      { rank:33, title:"Water",              artist:"Tyla",                  album:"TYLA",                           streams:1452478418, year:2023, duration:"3:20", art:"amber", coverUrl:"https://i.scdn.co/image/ab67616d0000b273e163c625ff117dbffb38e05e" },
+      { rank:34, title:"Seven",              artist:"Jung Kook, Latto",      album:"GOLDEN",                         streams:1398389237, year:2023, duration:"3:04", art:"emerald", coverUrl:"https://i.scdn.co/image/ab67616d0000b273bf5cce5a54620f1883be7839" },
+      { rank:35, title:"Standing Next to You", artist:"Jung Kook",           album:"GOLDEN",                         streams:1346131619, year:2023, duration:"3:26", art:"emerald", coverUrl:"https://i.scdn.co/image/ab67616d0000b273bf5cce5a54620f1883be7839" },
+      { rank:36, title:"Unwritten",          artist:"Natasha Bedingfield",   album:"Unwritten",                      streams:1295855904, year:2004, duration:"4:19", art:"asitwas", coverUrl:"https://i.scdn.co/image/ab67616d0000b2739c946be54da747ecdf456fe2" },
+      { rank:37, title:"Snooze",             artist:"SZA",                   album:"SOS",                            streams:1247716642, year:2022, duration:"3:21", art:"ocean", coverUrl:"https://i.scdn.co/image/ab67616d0000b2730c471c36970b94093ed7fed7" },
+      { rank:38, title:"Saturn",             artist:"SZA",                   album:"Saturn",                         streams:1201068374, year:2024, duration:"3:06", art:"emerald", coverUrl:"https://i.scdn.co/image/ab67616d0000b2739cfbe422ee01ee22c4f74d08" },
+      { rank:39, title:"Strangers",          artist:"Kenya Grace",           album:"Strangers",                      streams:1156311509, year:2023, duration:"2:52", art:"neon", coverUrl:"https://i.scdn.co/image/ab67616d0000b273f1d3c0356aece7dbe63737ec" },
+      { rank:40, title:"Prada",              artist:"cassö, RAYE, D-Block Europe", album:"Prada",                   streams:1113390612, year:2023, duration:"2:12", art:"mono", coverUrl:"https://i.scdn.co/image/ab67616d0000b273c6838a16db59eb23e382d561" },
+      { rank:41, title:"Houdini",            artist:"Dua Lipa",              album:"Radical Optimism",               streams:1071996246, year:2023, duration:"3:05", art:"ocean", coverUrl:"https://i.scdn.co/image/ab67616d0000b2732f14620f8623b08e5e3ff0a0" },
+      { rank:42, title:"Training Season",    artist:"Dua Lipa",              album:"Radical Optimism",               streams:1031728143, year:2024, duration:"3:29", art:"ocean", coverUrl:"https://i.scdn.co/image/ab67616d0000b2732f14620f8623b08e5e3ff0a0" },
+      { rank:43, title:"Illusion",           artist:"Dua Lipa",              album:"Radical Optimism",               streams:993296035,  year:2024, duration:"3:08", art:"ocean", coverUrl:"https://i.scdn.co/image/ab67616d0000b2732f14620f8623b08e5e3ff0a0" },
+      { rank:44, title:"Stargazing",         artist:"Myles Smith",           album:"Stargazing",                     streams:956222984,  year:2024, duration:"2:52", art:"amber", coverUrl:"https://i.scdn.co/image/ab67616d0000b27311ae50ef9ff9a1f2868c2ee3" },
+      { rank:45, title:"Austin",             artist:"Dasha",                 album:"What Happens Now?",              streams:920567644,  year:2024, duration:"2:51", art:"sunflower", coverUrl:"https://i.scdn.co/image/ab67616d0000b2738739a85975e53e778bc9b244" },
+      { rank:46, title:"Stick Season",       artist:"Noah Kahan",            album:"Stick Season",                   streams:886242384,  year:2022, duration:"3:02", art:"emerald", coverUrl:"https://i.scdn.co/image/ab67616d0000b27376c66cf9b8e2197e594d4d6a" },
+      { rank:47, title:"I Remember Everything", artist:"Zach Bryan, Kacey Musgraves", album:"Zach Bryan",           streams:853197012,  year:2023, duration:"3:47", art:"mono", coverUrl:"https://i.scdn.co/image/ab67616d0000b2739cfd05b76f1e8dbbaef5ee1a" },
+      { rank:48, title:"Something in the Orange", artist:"Zach Bryan",       album:"American Heartbreak",            streams:821383084,  year:2022, duration:"3:48", art:"amber", coverUrl:"https://i.scdn.co/image/ab67616d0000b273397193a02a0a2df339ce2a37" },
+      { rank:49, title:"505",                artist:"Arctic Monkeys",        album:"Favourite Worst Nightmare",      streams:790756618,  year:2007, duration:"4:13", art:"mono", coverUrl:"https://i.scdn.co/image/ab67616d0000b27318ecf0d06ec733f1e9628b79" },
+      { rank:50, title:"Riptide",            artist:"Vance Joy",             album:"Dream Your Life Away",           streams:761271822,  year:2013, duration:"3:24", art:"emerald", coverUrl:"https://i.scdn.co/image/ab67616d0000b273ecb14b1c7f536761eb857cd1" }
+    ];
+
+    const COUNTRY_DATA = {
+      france: {
+        label: "France", flag: "🇫🇷",
+        heroTitle: "La France sur écoute.",
+        heroSubtitle: "Le Top 10 Spotify France — classement et pochettes en direct.",
+        editionTag: "ÉDITION FRANCE", editionTitle: "Les favoris en France.",
+        chartTitle: "Le Top 10 en France", chartSubtitle: "Classement officiel Spotify France avec pochettes d'albums HD.",
+        scopeCaption: "Top 10 Spotify France", footerSummary: "Top 10 Spotify France mis à jour en temps réel.",
+        tracks: [
+          { rank: 1, title: "Blinding Lights", artist: "The Weeknd", album: "After Hours", streams: 284000000, year: 2019, duration: "3:20", art: "blinding", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" },
+          { rank: 2, title: "As It Was", artist: "Harry Styles", album: "Harry's House", streams: 258261913, year: 2022, duration: "2:47", art: "asitwas", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e8f6fb74623f3775a057495" },
+          { rank: 3, title: "Cruel Summer", artist: "Taylor Swift", album: "Lover", streams: 234856384, year: 2019, duration: "2:58", art: "cruel", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" },
+          { rank: 4, title: "Another Love", artist: "Tom Odell", album: "Long Way Down", streams: 213572048, year: 2012, duration: "4:04", art: "anotherlove", coverUrl: "https://i.scdn.co/image/ab67616d0000b27319bc5a4f4d2f0eb305c742c0" },
+          { rank: 5, title: "Flowers", artist: "Miley Cyrus", album: "Endless Summer Vacation", streams: 194216640, year: 2023, duration: "3:20", art: "flowers", coverUrl: "https://i.scdn.co/image/ab67616d0000b273f429549123dbe8552764ba1d" },
+          { rank: 6, title: "Die With A Smile", artist: "Lady Gaga, Bruno Mars", album: "Die With A Smile", streams: 176615356, year: 2024, duration: "4:11", art: "diewithasmile", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e02117d768ee9e14a554aef" },
+          { rank: 7, title: "Sunflower", artist: "Post Malone, Swae Lee", album: "Spider-Man: Into the Spider-Verse", streams: 160609225, year: 2018, duration: "2:38", art: "sunflower", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e2e352d89826aef6dbd5ff8f" },
+          { rank: 8, title: "Espresso", artist: "Sabrina Carpenter", album: "Short n' Sweet", streams: 146053862, year: 2024, duration: "2:55", art: "espresso", coverUrl: "https://i.scdn.co/image/ab67616d0000b273659e0e35109664f9f2c17442" },
+          { rank: 9, title: "Sweater Weather", artist: "The Neighbourhood", album: "I Love You.", streams: 132817285, year: 2012, duration: "4:00", art: "sweater", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738265a736a1eb838ad5a9b9a8" },
+          { rank: 10, title: "BIRDS OF A FEATHER", artist: "Billie Eilish", album: "HIT ME HARD AND SOFT", streams: 120790426, year: 2024, duration: "3:30", art: "ocean", coverUrl: "https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62" }
+        ]
+      },
+      italie: {
+        label: "Italie", flag: "🇮🇹",
+        heroTitle: "L'Italie sur écoute.",
+        heroSubtitle: "Le Top 10 Spotify Italy — classement et pochettes en direct.",
+        editionTag: "ÉDITION ITALIE", editionTitle: "Les favoris en Italie.",
+        chartTitle: "Le Top 10 en Italie", chartSubtitle: "Classement officiel Spotify Italy avec pochettes d'albums HD.",
+        scopeCaption: "Top 10 Spotify Italy", footerSummary: "Top 10 Spotify Italy mis à jour en temps réel.",
+        tracks: [
+          { rank: 1, title: "Another Love", artist: "Tom Odell", album: "Long Way Down", streams: 196000000, year: 2012, duration: "4:04", art: "anotherlove", coverUrl: "https://i.scdn.co/image/ab67616d0000b27319bc5a4f4d2f0eb305c742c0" },
+          { rank: 2, title: "Blinding Lights", artist: "The Weeknd", album: "After Hours", streams: 184000000, year: 2019, duration: "3:20", art: "blinding", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" },
+          { rank: 3, title: "As It Was", artist: "Harry Styles", album: "Harry's House", streams: 172000000, year: 2022, duration: "2:47", art: "asitwas", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e8f6fb74623f3775a057495" },
+          { rank: 4, title: "Flowers", artist: "Miley Cyrus", album: "Endless Summer Vacation", streams: 160000000, year: 2023, duration: "3:20", art: "flowers", coverUrl: "https://i.scdn.co/image/ab67616d0000b273f429549123dbe8552764ba1d" },
+          { rank: 5, title: "Cruel Summer", artist: "Taylor Swift", album: "Lover", streams: 148000000, year: 2019, duration: "2:58", art: "cruel", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" },
+          { rank: 6, title: "BIRDS OF A FEATHER", artist: "Billie Eilish", album: "HIT ME HARD AND SOFT", streams: 136000000, year: 2024, duration: "3:30", art: "ocean", coverUrl: "https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62" },
+          { rank: 7, title: "Die With A Smile", artist: "Lady Gaga, Bruno Mars", album: "Die With A Smile", streams: 124000000, year: 2024, duration: "4:11", art: "diewithasmile", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e02117d768ee9e14a554aef" },
+          { rank: 8, title: "Sweater Weather", artist: "The Neighbourhood", album: "I Love You.", streams: 112000000, year: 2012, duration: "4:00", art: "sweater", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738265a736a1eb838ad5a9b9a8" },
+          { rank: 9, title: "Sunflower", artist: "Post Malone, Swae Lee", album: "Spider-Man: Into the Spider-Verse", streams: 100000000, year: 2018, duration: "2:38", art: "sunflower", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e2e352d89826aef6dbd5ff8f" },
+          { rank: 10, title: "Espresso", artist: "Sabrina Carpenter", album: "Short n' Sweet", streams: 88000000, year: 2024, duration: "2:55", art: "espresso", coverUrl: "https://i.scdn.co/image/ab67616d0000b273659e0e35109664f9f2c17442" }
+        ]
+      },
+      "etats-unis": {
+        label: "États-Unis", flag: "🇺🇸",
+        heroTitle: "Les États-Unis sur écoute.",
+        heroSubtitle: "Le Top 10 Spotify USA — classement et pochettes en direct.",
+        editionTag: "ÉDITION ÉTATS-UNIS", editionTitle: "Les favoris aux USA.",
+        chartTitle: "Le Top 10 aux États-Unis", chartSubtitle: "Classement officiel Spotify USA avec pochettes d'albums HD.",
+        scopeCaption: "Top 10 Spotify USA", footerSummary: "Top 10 Spotify USA mis à jour en temps réel.",
+        tracks: [
+          { rank: 1, title: "Sunflower", artist: "Post Malone, Swae Lee", album: "Spider-Man: Into the Spider-Verse", streams: 1480000000, year: 2018, duration: "2:38", art: "sunflower", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e2e352d89826aef6dbd5ff8f" },
+          { rank: 2, title: "Blinding Lights", artist: "The Weeknd", album: "After Hours", streams: 1383000000, year: 2019, duration: "3:20", art: "blinding", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" },
+          { rank: 3, title: "Cruel Summer", artist: "Taylor Swift", album: "Lover", streams: 1286000000, year: 2019, duration: "2:58", art: "cruel", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" },
+          { rank: 4, title: "Sweater Weather", artist: "The Neighbourhood", album: "I Love You.", streams: 1189000000, year: 2012, duration: "4:00", art: "sweater", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738265a736a1eb838ad5a9b9a8" },
+          { rank: 5, title: "Flowers", artist: "Miley Cyrus", album: "Endless Summer Vacation", streams: 1092000000, year: 2023, duration: "3:20", art: "flowers", coverUrl: "https://i.scdn.co/image/ab67616d0000b273f429549123dbe8552764ba1d" },
+          { rank: 6, title: "Die With A Smile", artist: "Lady Gaga, Bruno Mars", album: "Die With A Smile", streams: 995000000, year: 2024, duration: "4:11", art: "diewithasmile", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e02117d768ee9e14a554aef" },
+          { rank: 7, title: "As It Was", artist: "Harry Styles", album: "Harry's House", streams: 898000000, year: 2022, duration: "2:47", art: "asitwas", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e8f6fb74623f3775a057495" },
+          { rank: 8, title: "Espresso", artist: "Sabrina Carpenter", album: "Short n' Sweet", streams: 801000000, year: 2024, duration: "2:55", art: "espresso", coverUrl: "https://i.scdn.co/image/ab67616d0000b273659e0e35109664f9f2c17442" },
+          { rank: 9, title: "BIRDS OF A FEATHER", artist: "Billie Eilish", album: "HIT ME HARD AND SOFT", streams: 704000000, year: 2024, duration: "3:30", art: "ocean", coverUrl: "https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62" },
+          { rank: 10, title: "Another Love", artist: "Tom Odell", album: "Long Way Down", streams: 607000000, year: 2012, duration: "4:04", art: "anotherlove", coverUrl: "https://i.scdn.co/image/ab67616d0000b27319bc5a4f4d2f0eb305c742c0" }
+        ]
+      },
+      allemagne: {
+        label: "Allemagne", flag: "🇩🇪",
+        heroTitle: "L'Allemagne sur écoute.",
+        heroSubtitle: "Le Top 10 Spotify Germany — classement et pochettes en direct.",
+        editionTag: "ÉDITION ALLEMAGNE", editionTitle: "Les favoris en Allemagne.",
+        chartTitle: "Le Top 10 en Allemagne", chartSubtitle: "Classement officiel Spotify Germany avec pochettes d'albums HD.",
+        scopeCaption: "Top 10 Spotify Germany", footerSummary: "Top 10 Spotify Germany mis à jour en temps réel.",
+        tracks: [
+          { rank: 1, title: "Sweater Weather", artist: "The Neighbourhood", album: "I Love You.", streams: 412000000, year: 2012, duration: "4:00", art: "sweater", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738265a736a1eb838ad5a9b9a8" },
+          { rank: 2, title: "Another Love", artist: "Tom Odell", album: "Long Way Down", streams: 385000000, year: 2012, duration: "4:04", art: "anotherlove", coverUrl: "https://i.scdn.co/image/ab67616d0000b27319bc5a4f4d2f0eb305c742c0" },
+          { rank: 3, title: "Blinding Lights", artist: "The Weeknd", album: "After Hours", streams: 358000000, year: 2019, duration: "3:20", art: "blinding", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" },
+          { rank: 4, title: "As It Was", artist: "Harry Styles", album: "Harry's House", streams: 331000000, year: 2022, duration: "2:47", art: "asitwas", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e8f6fb74623f3775a057495" },
+          { rank: 5, title: "Flowers", artist: "Miley Cyrus", album: "Endless Summer Vacation", streams: 304000000, year: 2023, duration: "3:20", art: "flowers", coverUrl: "https://i.scdn.co/image/ab67616d0000b273f429549123dbe8552764ba1d" },
+          { rank: 6, title: "Cruel Summer", artist: "Taylor Swift", album: "Lover", streams: 277000000, year: 2019, duration: "2:58", art: "cruel", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" },
+          { rank: 7, title: "Die With A Smile", artist: "Lady Gaga, Bruno Mars", album: "Die With A Smile", streams: 250000000, year: 2024, duration: "4:11", art: "diewithasmile", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e02117d768ee9e14a554aef" },
+          { rank: 8, title: "Sunflower", artist: "Post Malone, Swae Lee", album: "Spider-Man: Into the Spider-Verse", streams: 223000000, year: 2018, duration: "2:38", art: "sunflower", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e2e352d89826aef6dbd5ff8f" },
+          { rank: 9, title: "BIRDS OF A FEATHER", artist: "Billie Eilish", album: "HIT ME HARD AND SOFT", streams: 196000000, year: 2024, duration: "3:30", art: "ocean", coverUrl: "https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62" },
+          { rank: 10, title: "Espresso", artist: "Sabrina Carpenter", album: "Short n' Sweet", streams: 169000000, year: 2024, duration: "2:55", art: "espresso", coverUrl: "https://i.scdn.co/image/ab67616d0000b273659e0e35109664f9f2c17442" }
+        ]
+      },
+      espagne: {
+        label: "Espagne", flag: "🇪🇸",
+        heroTitle: "L'Espagne sur écoute.",
+        heroSubtitle: "Le Top 10 Spotify Spain — classement et pochettes en direct.",
+        editionTag: "ÉDITION ESPAGNE", editionTitle: "Les favoris en Espagne.",
+        chartTitle: "Le Top 10 en Espagne", chartSubtitle: "Classement officiel Spotify Spain avec pochettes d'albums HD.",
+        scopeCaption: "Top 10 Spotify Spain", footerSummary: "Top 10 Spotify Spain mis à jour en temps réel.",
+        tracks: [
+          { rank: 1, title: "As It Was", artist: "Harry Styles", album: "Harry's House", streams: 218000000, year: 2022, duration: "2:47", art: "asitwas", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e8f6fb74623f3775a057495" },
+          { rank: 2, title: "Flowers", artist: "Miley Cyrus", album: "Endless Summer Vacation", streams: 204000000, year: 2023, duration: "3:20", art: "flowers", coverUrl: "https://i.scdn.co/image/ab67616d0000b273f429549123dbe8552764ba1d" },
+          { rank: 3, title: "Die With A Smile", artist: "Lady Gaga, Bruno Mars", album: "Die With A Smile", streams: 190000000, year: 2024, duration: "4:11", art: "diewithasmile", coverUrl: "https://i.scdn.co/image/ab67616d0000b2732e02117d768ee9e14a554aef" },
+          { rank: 4, title: "Blinding Lights", artist: "The Weeknd", album: "After Hours", streams: 176000000, year: 2019, duration: "3:20", art: "blinding", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" },
+          { rank: 5, title: "Cruel Summer", artist: "Taylor Swift", album: "Lover", streams: 162000000, year: 2019, duration: "2:58", art: "cruel", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" },
+          { rank: 6, title: "Espresso", artist: "Sabrina Carpenter", album: "Short n' Sweet", streams: 148000000, year: 2024, duration: "2:55", art: "espresso", coverUrl: "https://i.scdn.co/image/ab67616d0000b273659e0e35109664f9f2c17442" },
+          { rank: 7, title: "Another Love", artist: "Tom Odell", album: "Long Way Down", streams: 134000000, year: 2012, duration: "4:04", art: "anotherlove", coverUrl: "https://i.scdn.co/image/ab67616d0000b27319bc5a4f4d2f0eb305c742c0" },
+          { rank: 8, title: "Sunflower", artist: "Post Malone, Swae Lee", album: "Spider-Man: Into the Spider-Verse", streams: 120000000, year: 2018, duration: "2:38", art: "sunflower", coverUrl: "https://i.scdn.co/image/ab67616d0000b273e2e352d89826aef6dbd5ff8f" },
+          { rank: 9, title: "BIRDS OF A FEATHER", artist: "Billie Eilish", album: "HIT ME HARD AND SOFT", streams: 106000000, year: 2024, duration: "3:30", art: "ocean", coverUrl: "https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62" },
+          { rank: 10, title: "Sweater Weather", artist: "The Neighbourhood", album: "I Love You.", streams: 92000000, year: 2012, duration: "4:00", art: "sweater", coverUrl: "https://i.scdn.co/image/ab67616d0000b2738265a736a1eb838ad5a9b9a8" }
+        ]
+      }
+    };
+
+    const COUNTRY_META = {
+      france:       { label:"France",       flag:"🇫🇷", heroTitle:"La France sur écoute.",       heroSubtitle:"Le Top 10 Spotify France — classement et pochettes en direct.", editionTag:"ÉDITION FRANCE",       editionTitle:"Les favoris en France.",      chartTitle:"Le Top 10 en France",       chartSubtitle:"Classement officiel Spotify France avec pochettes d'albums HD.", scopeCaption:"Top 10 Spotify France",      footerSummary:"Top 10 Spotify France mis à jour en temps réel." },
+      italie:       { label:"Italie",       flag:"🇮🇹", heroTitle:"L'Italie sur écoute.",        heroSubtitle:"Le Top 10 Spotify Italy — classement et pochettes en direct.",  editionTag:"ÉDITION ITALIE",        editionTitle:"Les favoris en Italie.",      chartTitle:"Le Top 10 en Italie",       chartSubtitle:"Classement officiel Spotify Italy avec pochettes d'albums HD.",  scopeCaption:"Top 10 Spotify Italy",       footerSummary:"Top 10 Spotify Italy mis à jour en temps réel." },
+      'etats-unis': { label:"États-Unis",   flag:"🇺🇸", heroTitle:"Les États-Unis sur écoute.",  heroSubtitle:"Le Top 10 Spotify USA — classement et pochettes en direct.",    editionTag:"ÉDITION ÉTATS-UNIS",    editionTitle:"Les favoris aux USA.",        chartTitle:"Le Top 10 aux États-Unis",  chartSubtitle:"Classement officiel Spotify USA avec pochettes d'albums HD.",    scopeCaption:"Top 10 Spotify USA",         footerSummary:"Top 10 Spotify USA mis à jour en temps réel." },
+      allemagne:    { label:"Allemagne",    flag:"🇩🇪", heroTitle:"L'Allemagne sur écoute.",     heroSubtitle:"Le Top 10 Spotify Germany — classement et pochettes en direct.", editionTag:"ÉDITION ALLEMAGNE",     editionTitle:"Les favoris en Allemagne.",   chartTitle:"Le Top 10 en Allemagne",    chartSubtitle:"Classement officiel Spotify Germany avec pochettes d'albums HD.",scopeCaption:"Top 10 Spotify Germany",      footerSummary:"Top 10 Spotify Germany mis à jour en temps réel." },
+      espagne:      { label:"Espagne",      flag:"🇪🇸", heroTitle:"L'Espagne sur écoute.",       heroSubtitle:"Le Top 10 Spotify Spain — classement et pochettes en direct.",   editionTag:"ÉDITION ESPAGNE",       editionTitle:"Les favoris en Espagne.",     chartTitle:"Le Top 10 en Espagne",      chartSubtitle:"Classement officiel Spotify Spain avec pochettes d'albums HD.",  scopeCaption:"Top 10 Spotify Spain",       footerSummary:"Top 10 Spotify Spain mis à jour en temps réel." }
+    };
+
+    // =========================================================
+    // STATE
+    // =========================================================
+    let currentRegion   = 'world';
+    let searchQuery     = '';
+    let sortDescending  = true;
+    let currentTrack    = null;
+    let isPlaying       = false;
+    let currentVolume   = 0.75;
+    let isSpotifyConnected = false;
+
+    // Runtime data stores
+    let liveData = {};
+    let coverCache = {};
+
+    // Initialize cover cache with DEMO_WORLD covers so they exist immediately!
+    DEMO_WORLD.forEach(t => {
+      const key = `${t.title}::${t.artist}`;
+      coverCache[key] = { coverUrl: t.coverUrl, previewUrl: null, spotifyId: null, spotifyUrl: null };
+    });
+
+    try {
+      const saved = JSON.parse(localStorage.getItem('hl_covers') || '{}');
+      Object.assign(coverCache, saved);
+    } catch(e){}
+
+    function currentTracks() {
+      if (liveData[currentRegion] && liveData[currentRegion].length > 0) return liveData[currentRegion];
+      if (currentRegion !== 'world' && COUNTRY_DATA[currentRegion]) return COUNTRY_DATA[currentRegion].tracks;
+      return DEMO_WORLD;
+    }
+
+    // =========================================================
+    // VÉRIFICATION DU SERVEUR SÉCURISÉ (aucun secret côté client)
+    // =========================================================
+    async function checkServerConfig() {
+      try {
+        const r = await fetch(spotifyApiUrl('config'), {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin'
+        });
+        if (!r.ok) throw new Error('Configuration indisponible');
+        const data = await r.json();
+        isSpotifyConnected = Boolean(data.configured);
+      } catch (e) {
+        // Ouverture directe du fichier (file://) ou serveur non démarré :
+        // mode local avec les données intégrées, sans exposition de clé.
+        isSpotifyConnected = false;
+      }
+      updateSpotifyBadge(isSpotifyConnected);
+      return isSpotifyConnected;
+    }
+
+    // =========================================================
+    // FETCH PLAYLIST FROM SPOTIFY
+    // =========================================================
+    async function fetchPlaylist(region, silent = false) {
+      if (!silent) showLoadingSkeleton(true);
+
+      try {
+        // Appel de même origine : le navigateur ne voit aucun identifiant.
+        const r = await fetch(spotifyApiUrl('playlist', { region }), {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin'
+        });
+
+        if (r.ok) {
+          const tracks = await r.json();
+          if (Array.isArray(tracks) && tracks.length > 0) {
+            tracks.forEach(t => {
+              if (t.coverUrl) {
+                const key = `${t.title}::${t.artist}`;
+                const existing = coverCache[key] || {};
+                coverCache[key] = {
+                  coverUrl: t.coverUrl,
+                  previewUrl: existing.previewUrl || t.previewUrl || null,
+                  spotifyId: t.spotifyId || null,
+                  spotifyUrl: t.spotifyUrl || null
+                };
+              }
+            });
+            liveData[region] = tracks;
+            saveCovers();
+            isSpotifyConnected = true;
+            updateSpotifyBadge(true);
+            if (!silent) showLoadingSkeleton(false);
+            return true;
+          }
+        }
+      } catch (e) {
+        // Serveur absent : repli silencieux sur les données locales.
+      }
+
+      if (!silent) showLoadingSkeleton(false);
+      isSpotifyConnected = false;
+      updateSpotifyBadge(false);
+      return false;
+    }
+
+    // Helper pour associer un art SVG personnalisé par titre
+    function getArtForTitle(title) {
+      const t = (title || '').toLowerCase();
+      if (t.includes('blinding') || t.includes('tears')) return 'blinding';
+      if (t.includes('sunflower')) return 'sunflower';
+      if (t.includes('as it was') || t.includes('unwritten')) return 'asitwas';
+      if (t.includes('heat waves')) return 'heatwaves';
+      if (t.includes('cruel') || t.includes('good luck')) return 'cruel';
+      if (t.includes('flowers')) return 'flowers';
+      if (t.includes('another love')) return 'anotherlove';
+      if (t.includes('sweater')) return 'sweater';
+      if (t.includes('die with a smile')) return 'diewithasmile';
+      if (t.includes('espresso') || t.includes('please please')) return 'espresso';
+      if (t.includes('kill bill') || t.includes('birds') || t.includes('lunch') || t.includes('houdini') || t.includes('training') || t.includes('illusion')) return 'ocean';
+      if (t.includes('levitating') || t.includes('end of') || t.includes('strangers') || t.includes('lovin')) return 'neon';
+      if (t.includes('too sweet') || t.includes('beautiful') || t.includes('bar song') || t.includes('help') || t.includes('water') || t.includes('stargazing') || t.includes('orange')) return 'amber';
+      if (t.includes('lose control') || t.includes('friends') || t.includes('not like us') || t.includes('greedy') || t.includes('paint the town')) return 'crimson';
+      if (t.includes('seven') || t.includes('standing') || t.includes('saturn') || t.includes('stick') || t.includes('riptide')) return 'emerald';
+      return 'mono';
+    }
+
+    // =========================================================
+    // CUSTOM ILLUSTRATIVE SVG COVER GENERATOR (Instantané 0ms)
+    // =========================================================
+    function getCoverSVG(artType, sizeClass = "w-full h-full") {
+      const covers = {
+        blinding: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g-blind" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#3b0712"/>
+                <stop offset="55%" stop-color="#991b1b"/>
+                <stop offset="100%" stop-color="#f59e0b"/>
+              </linearGradient>
+            </defs>
+            <rect width="100" height="100" fill="url(#g-blind)"/>
+            <circle cx="50" cy="44" r="22" fill="#fbbf24" opacity="0.25"/>
+            <path d="M0 78 Q50 58 100 78 L100 100 L0 100 Z" fill="#09090b" opacity="0.85"/>
+            <line x1="15" y1="25" x2="85" y2="25" stroke="#fcd34d" stroke-width="1.5" opacity="0.5"/>
+          </svg>`,
+        sunflower: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#e5e5e5"/>
+            <circle cx="50" cy="50" r="34" fill="#d4d4d8"/>
+            <path d="M50 18 L58 42 L82 50 L58 58 L50 82 L42 58 L18 50 L42 42 Z" fill="#18181b"/>
+            <circle cx="50" cy="50" r="11" fill="#f59e0b"/>
+            <circle cx="50" cy="50" r="5" fill="#18181b"/>
+          </svg>`,
+        asitwas: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g-harry" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#f3e8d2"/>
+                <stop offset="100%" stop-color="#cbd5e1"/>
+              </linearGradient>
+            </defs>
+            <rect width="100" height="100" fill="url(#g-harry)"/>
+            <rect x="24" y="28" width="52" height="44" rx="4" fill="#94a3b8" opacity="0.45"/>
+            <circle cx="50" cy="48" r="14" fill="#dc2626" opacity="0.8"/>
+            <path d="M22 72 L78 72" stroke="#334155" stroke-width="2"/>
+          </svg>`,
+        anotherlove: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g-odell" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#1e293b"/>
+                <stop offset="60%" stop-color="#475569"/>
+                <stop offset="100%" stop-color="#0f172a"/>
+              </linearGradient>
+            </defs>
+            <rect width="100" height="100" fill="url(#g-odell)"/>
+            <circle cx="65" cy="30" r="14" fill="#e2e8f0" opacity="0.25"/>
+            <path d="M0 70 L35 52 L68 65 L100 48 L100 100 L0 100 Z" fill="#090d16"/>
+          </svg>`,
+        sweater: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g-nbhd" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#0284c7"/>
+                <stop offset="50%" stop-color="#38bdf8"/>
+                <stop offset="100%" stop-color="#0c4a6e"/>
+              </linearGradient>
+            </defs>
+            <rect width="100" height="100" fill="url(#g-nbhd)"/>
+            <rect x="20" y="20" width="60" height="60" rx="12" fill="none" stroke="#ffffff" stroke-width="2.5" opacity="0.7"/>
+            <path d="M35 65 L50 35 L65 65 Z" fill="#ffffff" opacity="0.85"/>
+          </svg>`,
+        flowers: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g-miley" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#78350f"/>
+                <stop offset="50%" stop-color="#d97706"/>
+                <stop offset="100%" stop-color="#fef3c7"/>
+              </linearGradient>
+            </defs>
+            <rect width="100" height="100" fill="url(#g-miley)"/>
+            <circle cx="50" cy="45" r="20" fill="#fde68a" opacity="0.6"/>
+            <rect x="47" y="45" width="6" height="40" fill="#451a03"/>
+          </svg>`,
+        cruel: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g-lover" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#f472b6"/>
+                <stop offset="50%" stop-color="#c084fc"/>
+                <stop offset="100%" stop-color="#60a5fa"/>
+              </linearGradient>
+            </defs>
+            <rect width="100" height="100" fill="url(#g-lover)"/>
+            <path d="M50 72 C25 54 22 34 37 34 C45 34 50 42 50 42 C50 42 55 34 63 34 C78 34 75 54 50 72 Z" fill="#fdf2f8" opacity="0.85"/>
+          </svg>`,
+        diewithasmile: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#1e1b4b"/>
+            <circle cx="38" cy="50" r="22" fill="#dc2626" opacity="0.85"/>
+            <circle cx="62" cy="50" r="22" fill="#2563eb" opacity="0.85"/>
+          </svg>`,
+        heatwaves: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="g-heat" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#4c1d95"/>
+                <stop offset="100%" stop-color="#ec4899"/>
+              </linearGradient>
+            </defs>
+            <rect width="100" height="100" fill="url(#g-heat)"/>
+            <path d="M10 40 Q30 25 50 40 T90 40" fill="none" stroke="#22d3ee" stroke-width="3"/>
+            <path d="M10 60 Q30 45 50 60 T90 60" fill="none" stroke="#facc15" stroke-width="3"/>
+          </svg>`,
+        espresso: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#bae6fd"/>
+            <circle cx="50" cy="52" r="24" fill="#fef08a"/>
+            <path d="M36 55 Q50 68 64 55" fill="none" stroke="#78350f" stroke-width="3" stroke-linecap="round"/>
+          </svg>`,
+        ocean: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#082f49"/>
+            <circle cx="50" cy="45" r="24" fill="#0284c7" opacity="0.45"/>
+            <path d="M0 68 Q50 52 100 68 L100 100 L0 100 Z" fill="#0c4a6e"/>
+          </svg>`,
+        neon: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#18181b"/>
+            <circle cx="50" cy="50" r="28" fill="none" stroke="#a855f7" stroke-width="4"/>
+            <circle cx="50" cy="50" r="14" fill="#ec4899" opacity="0.8"/>
+          </svg>`,
+        amber: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#292524"/>
+            <circle cx="50" cy="50" r="26" fill="#d97706" opacity="0.7"/>
+          </svg>`,
+        crimson: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#27090d"/>
+            <rect x="25" y="25" width="50" height="50" rx="8" fill="#e11d48" opacity="0.75"/>
+          </svg>`,
+        emerald: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#052e16"/>
+            <circle cx="50" cy="50" r="25" fill="#10b981" opacity="0.65"/>
+          </svg>`,
+        mono: `
+          <svg viewBox="0 0 100 100" class="${sizeClass}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#171717"/>
+            <path d="M15 55 L35 55 L42 35 L50 68 L58 42 L65 55 L85 55" fill="none" stroke="#e5e5e5" stroke-width="2.5"/>
+          </svg>`
+      };
+      return covers[artType] || covers.mono;
+    }
+
+    // =========================================================
+    // AUDIO & COVER ENGINE (JSONP Haute Fiabilité sans blocage CORS)
+    // Permet d'écouter les extraits audio réels 30s et d'avoir des pochettes HD
+    // =========================================================
+    function searchAudioPreview(title, artist) {
+      return new Promise((resolve) => {
+        const cleanArtist = (artist || '').split(',')[0].replace(/\bfeat\b.*$/i, '').trim();
+        const cleanTitle = (title || '').replace(/\(.*?\)/g, '').replace(/\[.*?\]/g, '').trim();
+        const q = encodeURIComponent(`${cleanTitle} ${cleanArtist}`);
+        const cbName = 'hl_cb_' + Math.random().toString(36).substring(2, 9);
+
+        let done = false;
+        const cleanup = () => {
+          done = true;
+          try { delete window[cbName]; } catch(e){}
+          if (s && s.parentNode) s.parentNode.removeChild(s);
+        };
+
+        const timer = setTimeout(() => {
+          if (!done) { cleanup(); resolve(null); }
+        }, 3500);
+
+        window[cbName] = function(data) {
+          if (!done) {
+            clearTimeout(timer);
+            const hit = data?.results?.[0];
+            cleanup();
+            if (hit) {
+              resolve({
+                previewUrl: hit.previewUrl || null,
+                coverUrl: hit.artworkUrl100 ? hit.artworkUrl100.replace('100x100bb', '600x600bb') : null,
+                spotifyUrl: `https://open.spotify.com/search/${encodeURIComponent(cleanTitle + ' ' + cleanArtist)}`
+              });
+            } else {
+              resolve(null);
+            }
+          }
+        };
+
+        const s = document.createElement('script');
+        s.src = `https://itunes.apple.com/search?term=${q}&media=music&entity=song&limit=1&callback=${cbName}`;
+        s.onerror = function() {
+          if (!done) { clearTimeout(timer); cleanup(); resolve(null); }
+        };
+        document.head.appendChild(s);
+      });
+    }
+
+    // Résolution complète d'un morceau pour la lecture et les détails
+    async function resolveMedia(track) {
+      const key = `${track.title}::${track.artist}`;
+      let cached = coverCache[key] || {};
+
+      if (cached.coverUrl && cached.previewUrl) {
+        return cached;
+      }
+
+      cached.coverUrl = cached.coverUrl || track.coverUrl || null;
+      cached.spotifyId = cached.spotifyId || track.spotifyId || null;
+      cached.spotifyUrl = cached.spotifyUrl || track.spotifyUrl || null;
+
+      // 1. Recherche de l'extrait audio 30s via JSONP cross-origin
+      if (!cached.previewUrl) {
+        const fallback = await searchAudioPreview(track.title, track.artist);
+        if (fallback) {
+          if (fallback.previewUrl) cached.previewUrl = fallback.previewUrl;
+          if (fallback.coverUrl) cached.coverUrl = fallback.coverUrl;
+          if (!cached.spotifyUrl && fallback.spotifyUrl) cached.spotifyUrl = fallback.spotifyUrl;
+        }
+      }
+
+      // 2. Recherche Spotify via le proxy serveur (aucun token dans le navigateur)
+      if ((!cached.spotifyId || !cached.coverUrl) && isSpotifyConnected) {
+        try {
+          const cleanArtist = (track.artist || '').split(',')[0].trim();
+          const q = `track:${track.title} artist:${cleanArtist}`;
+          const r = await fetch(spotifyApiUrl('search', { q }), {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin'
+          });
+          if (r.ok) {
+            const item = await r.json();
+            if (item && item.id) {
+              cached.spotifyId  = item.id;
+              cached.spotifyUrl = item.spotifyUrl || null;
+              if (!cached.coverUrl && item.coverUrl) cached.coverUrl = item.coverUrl;
+              if (!cached.previewUrl && item.previewUrl) cached.previewUrl = item.previewUrl;
+            }
+          }
+        } catch (e) {}
+      }
+
+      coverCache[key] = cached;
+      saveCovers();
+      return cached;
+    }
+
+    function saveCovers() {
+      try { localStorage.setItem('hl_covers', JSON.stringify(coverCache)); } catch(e){}
+    }
+
+    // =========================================================
+    // RENDERING DES COVERS (Visible dès 0ms + Zéro erreur ORB)
+    // =========================================================
+    function renderCover(track, sz = 'w-full h-full') {
+      const key = `${track.title}::${track.artist}`;
+      const cached = coverCache[key];
+      const url = cached?.coverUrl || track.coverUrl;
+      const art = track.art || getArtForTitle(track.title);
+      const safeTitle = (track.title || '').replace(/"/g, '&quot;');
+
+      return `
+        <div class="${sz} relative overflow-hidden bg-[#161e31] rounded-lg">
+          <div class="${sz} absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
+            ${getCoverSVG(art, sz)}
+          </div>
+          ${url ? `
+            <img src="${url}" alt="${safeTitle}"
+                 class="${sz} object-cover relative z-10 transition-opacity duration-300"
+                 loading="lazy"
+                 referrerpolicy="no-referrer"
+                 onerror="this.onerror=null; this.style.display='none';" />
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function fmtFull(n) {
+      if (n === null || n === undefined) return '—';
+      return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    }
+    function fmtShort(n) {
+      if (n === null || n === undefined) return '—';
+      if (n >= 1e9) return (n/1e9).toFixed(2).replace('.', ',') + ' Md';
+      if (n >= 1e6) return (n/1e6).toFixed(1).replace('.', ',') + ' M';
+      return fmtFull(n);
+    }
+    function padRank(r) { return r < 10 ? `0${r}` : `${r}`; }
+    function fmtSec(s) {
+      if (!isFinite(s) || s < 0) return '0:00';
+      const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+      return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    function renderAll() {
+      const isWorld = currentRegion === 'world';
+      const meta = isWorld ? null : COUNTRY_META[currentRegion];
+      const tracks = currentTracks();
+
+      // Hero
+      qs('#heroTitle').textContent        = isWorld ? 'Le monde sur écoute.' : meta.heroTitle;
+      qs('#heroSubtitle').textContent     = isWorld ? 'Les 50 titres les plus populaires avec classement dynamique et pochettes d\'albums officielles.' : meta.heroSubtitle;
+      qs('#heroEditionTag').textContent   = isWorld ? 'ÉDITION MONDIALE' : meta.editionTag;
+      qs('#heroEditionTitle').textContent = isWorld ? 'Les records du streaming.' : meta.editionTitle;
+
+      // Chart
+      qs('#chartTitle').textContent    = isWorld ? 'Le Top 50 mondial' : meta.chartTitle;
+      qs('#chartSubtitle').textContent = isWorld ? 'Classé par popularité et écoutes, avec pochettes officielles et extraits audio.' : meta.chartSubtitle;
+      qs('#scopeCaption').textContent  = isWorld ? '50 titres synchronisés depuis Spotify' : meta.scopeCaption;
+      qs('#tableFooterLeft').textContent = isWorld ? '50 titres classés avec pochettes synchronisées depuis l\'API Spotify.' : meta.footerSummary;
+
+      // Filter pills
+      const bw = qs('#btnModeWorld'), bc = qs('#btnModeCountry');
+      const dl = qs('#countryDropdownLabel');
+      if (isWorld) {
+        bw.className = 'px-4 py-2 rounded-full text-xs font-semibold transition flex items-center gap-2 bg-[#ec4899]/15 text-[#f472b6] border border-[#ec4899]/45';
+        bc.className = 'px-4 py-2 rounded-full text-xs font-medium transition flex items-center gap-2 bg-[#131a2b] text-slate-400 hover:text-white border border-[#222d47]';
+        dl.innerHTML = 'Choisir un pays';
+      } else {
+        bw.className = 'px-4 py-2 rounded-full text-xs font-medium transition flex items-center gap-2 bg-[#131a2b] text-slate-400 hover:text-white border border-[#222d47]';
+        bc.className = 'px-4 py-2 rounded-full text-xs font-semibold transition flex items-center gap-2 bg-[#ec4899]/15 text-[#f472b6] border border-[#ec4899]/45';
+        dl.innerHTML = `<span class="text-sm leading-none">${meta.flag}</span> <span>${meta.label}</span>`;
+      }
+      qsa('.country-option').forEach(opt => {
+        const r = opt.dataset.region, ci = opt.querySelector('.check-icon');
+        if (r === currentRegion) { opt.classList.add('bg-white/[0.05]','text-white','font-semibold'); ci.classList.remove('hidden'); }
+        else { opt.classList.remove('bg-white/[0.05]','text-white','font-semibold'); ci.classList.add('hidden'); }
+      });
+
+      // Podium Top 3
+      renderPodium(tracks.slice(0, 3));
+
+      // Table
+      let filtered = tracks.filter(t => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q) || (t.album||'').toLowerCase().includes(q);
+      });
+      if (!sortDescending) {
+        filtered = [...filtered].sort((a, b) => (a.streams || a.popularity || 0) - (b.streams || b.popularity || 0));
+      }
+      renderTable(filtered, tracks.length);
+    }
+
+    function renderPodium(top3) {
+      const grid = qs('#podiumGrid');
+      if (!top3.length) { grid.innerHTML = '<p class="text-slate-500 text-xs col-span-3 py-6">Aucune donnée disponible.</p>'; return; }
+
+      grid.innerHTML = top3.map((track, idx) => {
+        const isFirst = idx === 0;
+        const cardClass = isFirst
+          ? 'podium-first-card border rounded-2xl p-4 sm:p-5 flex items-center gap-4 transition duration-200 cursor-pointer group'
+          : 'bg-[#131a2b] hover:bg-[#1a2338] border border-[#222d47] hover:border-[#3b82f6]/40 rounded-2xl p-4 sm:p-5 flex items-center gap-4 transition duration-200 cursor-pointer group';
+        const rankColor = isFirst ? 'hitlyst-gradient-text inline-block' : 'text-slate-500';
+        const playing = currentTrack?.title === track.title && isPlaying;
+
+        return `
+          <div onclick='playTrack(${JSON.stringify(track).replace(/'/g,"&#39;")})' class="${cardClass}">
+            <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden shrink-0 shadow-lg border border-white/[0.08] relative bg-[#0b0f19]">
+              ${renderCover(track)}
+              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                <svg class="w-6 h-6 text-white fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              </div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-xl sm:text-2xl font-extrabold leading-none mb-1.5 ${rankColor}">${padRank(track.rank)}</div>
+              <h3 class="text-sm sm:text-base font-bold text-white truncate group-hover:text-[#f472b6] transition">${track.title}</h3>
+              <p class="text-xs text-slate-400 truncate mt-0.5">${track.artist}</p>
+              <div class="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-between">
+                <div>
+                  <p class="text-xs sm:text-sm font-bold text-slate-100 tabular-nums">${fmtShort(track.streams)}</p>
+                  <p class="text-[10px] text-slate-500">écoutes estimées</p>
+                </div>
+                <button onclick='event.stopPropagation(); openTrackDetail(${JSON.stringify(track).replace(/'/g,"&#39;")})'
+                  class="text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded bg-white/[0.04] hover:bg-white/[0.1] transition">
+                  Infos
+                </button>
+              </div>
+            </div>
+            <button aria-label="Écouter ${track.title}"
+              class="self-end w-8 h-8 sm:w-9 sm:h-9 rounded-full hitlyst-play-btn hover:scale-105 active:scale-95 text-white flex items-center justify-center shrink-0 transition">
+              ${playing
+                ? '<svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
+                : '<svg class="w-3.5 h-3.5 fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>'}
+            </button>
+          </div>`;
+      }).join('');
+    }
+
+    function renderTable(rows, total) {
+      const tbody = qs('#chartTableBody');
+      const empty = qs('#emptySearchState');
+      qs('#countBadge').textContent   = `${rows.length} titre${rows.length > 1 ? 's' : ''}`;
+      qs('#tableFooterRight').textContent = `${rows.length} / ${total} titres`;
+
+      if (!rows.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
+      empty.classList.add('hidden');
+
+      tbody.innerHTML = rows.map(track => {
+        const isRank1   = track.rank === 1;
+        const isActive  = currentTrack?.title === track.title;
+        const rowClass  = isRank1
+          ? 'bg-gradient-to-r from-[#3b82f6]/[0.08] via-[#ec4899]/[0.08] to-transparent hover:from-[#3b82f6]/[0.14] hover:via-[#ec4899]/[0.14]'
+          : 'hover:bg-[#1a2338]';
+        const rankClass = isRank1
+          ? 'hitlyst-gradient-text font-extrabold'
+          : track.rank <= 3 ? 'text-[#f472b6] font-bold' : 'text-slate-500 font-medium';
+
+        return `
+          <tr class="${rowClass} transition group">
+            <td class="py-3 pl-5 pr-3 tabular-nums ${rankClass}">${padRank(track.rank)}</td>
+            <td class="py-3 px-3">
+              <div class="flex items-center gap-3.5 cursor-pointer" onclick='playTrack(${JSON.stringify(track).replace(/'/g,"&#39;")})'>
+                <div class="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/[0.08] relative bg-[#0b0f19]">
+                  ${renderCover(track)}
+                  <div class="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                    <svg class="w-4 h-4 text-[#ec4899] fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  </div>
+                </div>
+                <div class="min-w-0">
+                  <p class="font-semibold truncate max-w-[180px] sm:max-w-[260px] transition ${isActive ? 'text-[#f472b6]' : 'text-white group-hover:text-[#f472b6]'}">${track.title}</p>
+                  <p class="text-[11px] text-slate-400 truncate max-w-[180px] sm:max-w-[260px]">${track.artist}</p>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 px-3 text-slate-400 hidden md:table-cell truncate max-w-[180px]">${track.album || 'Single'}</td>
+            <td class="py-3 px-3 text-right font-medium text-slate-200 tabular-nums">
+              <span>${fmtFull(track.streams)}</span>
+              ${track.popularity ? `<span class="block text-[9px] text-slate-500">Score ${track.popularity}%</span>` : ''}
+            </td>
+            <td class="py-3 px-3 text-right text-slate-400 hidden sm:table-cell tabular-nums">${track.year || '2024'}</td>
+            <td class="py-3 pl-3 pr-5 text-right tabular-nums">
+              <div class="inline-flex items-center justify-end gap-2 text-slate-400">
+                <span class="hidden sm:inline">${track.duration || '3:00'}</span>
+                <button onclick='openTrackDetail(${JSON.stringify(track).replace(/'/g,"&#39;")})'
+                  class="w-7 h-7 rounded-full hover:bg-white/[0.08] hover:text-white flex items-center justify-center transition" title="Détails & Spotify">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle>
+                  </svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    // =========================================================
+    // NAVIGATION & FILTERS
+    // =========================================================
+    function switchTab(id) {
+      ['classement','decouvertes','apropos'].forEach(v => {
+        const view = qs(`#view-${v}`), nav = qs(`#nav-${v}`), ind = qs(`#nav-indicator-${v}`), mnav = qs(`#m-nav-${v}`);
+        if (v === id) {
+          view.classList.remove('hidden');
+          if (nav) nav.className = 'text-white relative py-5 transition font-semibold';
+          if (ind) ind.classList.remove('hidden');
+          if (mnav) mnav.className = 'text-[#ec4899] font-semibold py-1';
+        } else {
+          view.classList.add('hidden');
+          if (nav) nav.className = 'text-slate-400 hover:text-white relative py-5 transition';
+          if (ind) ind.classList.add('hidden');
+          if (mnav) mnav.className = 'text-slate-400 py-1';
+        }
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetToWorld()   { selectRegion('world'); switchTab('classement'); }
+    function handleSearch(v)  { searchQuery = v || ''; qs('#clearSearchBtn').classList.toggle('hidden', !v.trim()); renderAll(); }
+    function clearSearch()    { searchQuery = ''; qs('#searchInput').value = ''; qs('#clearSearchBtn').classList.add('hidden'); renderAll(); }
+    function toggleSortOrder(){ sortDescending = !sortDescending; qs('#sortArrow').textContent = sortDescending ? '↓' : '↑'; renderAll(); }
+    function jumpToCountryFromDiscover(c) { selectRegion(c); switchTab('classement'); }
+
+    function activateCountryMode() {
+      if (currentRegion === 'world') selectRegion('france');
+      else toggleCountryDropdown();
+    }
+
+    async function selectRegion(region) {
+      currentRegion = region;
+      closeDropdown();
+      renderAll();
+      if (!liveData[region]) {
+        await fetchPlaylist(region);
+        renderAll();
+      }
+    }
+
+    function toggleCountryDropdown(e) {
+      if (e) e.stopPropagation();
+      const m = qs('#countryDropdownMenu'), ch = qs('#countryChevron'), b = qs('#countryDropdownBtn');
+      const open = !m.classList.contains('hidden');
+      if (open) closeDropdown();
+      else { m.classList.remove('hidden'); ch.classList.add('rotate-180'); b.setAttribute('aria-expanded','true'); }
+    }
+    function closeDropdown() {
+      qs('#countryDropdownMenu')?.classList.add('hidden');
+      qs('#countryChevron')?.classList.remove('rotate-180');
+      qs('#countryDropdownBtn')?.setAttribute('aria-expanded','false');
+    }
+
+    async function refreshCurrentRegion() {
+      const icon = qs('#refreshIcon'), label = qs('#refreshLabel');
+      icon.classList.add('spin');
+      label.textContent = 'Actualisation...';
+      liveData[currentRegion] = null;
+      const ok = await fetchPlaylist(currentRegion);
+      icon.classList.remove('spin');
+      label.textContent = 'Actualiser Spotify';
+      if (ok) {
+        toast('Classement Spotify synchronisé avec succès ✓', 'success');
+        renderAll();
+      } else {
+        toast('Actualisation effectuée avec les données locales.', 'info');
+        renderAll();
+      }
+    }
+
+    function showLoadingSkeleton(show) {
+      qs('#loadingSkeleton').classList.toggle('hidden', !show);
+      qs('#chartTableBody').classList.toggle('hidden', show);
+    }
+
+    // =========================================================
+    // SPOTIFY MODAL & BADGE
+    // =========================================================
+    function openSpotifyModal() {
+      qs('#modalCacheCount').textContent = Object.keys(coverCache).length;
+      qs('#modalFeedback').classList.add('hidden');
+      updateModalTokenStatus();
+      qs('#spotifyModal').classList.remove('hidden');
+      checkServerConfig().then(updateModalTokenStatus);
+    }
+    function closeSpotifyModal() { qs('#spotifyModal').classList.add('hidden'); }
+    function closeSpotifyModalOnBackdrop(e) { if (e.target.id === 'spotifyModal') closeSpotifyModal(); }
+
+    function updateModalTokenStatus() {
+      const el = qs('#modalTokenStatus');
+      if (isSpotifyConnected) {
+        el.innerHTML = '<span style="color:#1db954;font-weight:600">● Serveur Spotify connecté</span>';
+      } else {
+        el.innerHTML = '<span style="color:#fbbf24;font-weight:600">● Mode local (données de démonstration)</span>';
+      }
+    }
+
+    function showModalFeedback(msg, type) {
+      const el = qs('#modalFeedback');
+      el.className = `px-3 py-2.5 rounded-xl text-xs font-medium border ${
+        type === 'success' ? 'bg-[#1db954]/10 text-[#1db954] border-[#1db954]/30' :
+        type === 'error'   ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
+        'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      }`;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    async function testServerConnection() {
+      const btn = qs('#btnSaveSpotify');
+      btn.disabled = true;
+      qs('#saveBtnLabel').textContent = 'Test en cours...';
+      showModalFeedback('Vérification du serveur sécurisé...', 'info');
+
+      const ready = await checkServerConfig();
+      if (ready) {
+        const synced = await fetchPlaylist('world', true);
+        showModalFeedback(
+          synced
+            ? 'Connexion sécurisée OK — classement synchronisé via le serveur.'
+            : 'Serveur configuré — utilisation des données de référence.',
+          synced ? 'success' : 'warning'
+        );
+        renderAll();
+      } else {
+        showModalFeedback('Serveur API indisponible : le site fonctionne en mode local, sans aucune clé exposée.', 'warning');
+      }
+
+      updateModalTokenStatus();
+      btn.disabled = false;
+      qs('#saveBtnLabel').textContent = 'Tester la connexion';
+    }
+
+    function updateSpotifyBadge(connected) {
+      const label = qs('#spotifyStatusLabel');
+      if (label) {
+        label.textContent = connected ? 'Spotify Live ●' : 'Spotify API';
+      }
+    }
+
+    function clearCache() {
+      coverCache = {};
+      DEMO_WORLD.forEach(t => {
+        coverCache[`${t.title}::${t.artist}`] = { coverUrl: t.coverUrl, previewUrl: null };
+      });
+      try { localStorage.removeItem('hl_covers'); } catch(e){}
+      qs('#modalCacheCount').textContent = Object.keys(coverCache).length;
+      showModalFeedback('Cache réinitialisé.', 'info');
+      renderAll();
+    }
+
+    // =========================================================
+    // TRACK DETAIL MODAL
+    // =========================================================
+    async function openTrackDetail(track) {
+      const regionLabel = currentRegion === 'world' ? 'Classement Mondial' : `Classement ${COUNTRY_META[currentRegion].label}`;
+      const mc = qs('#modalContent');
+
+      mc.innerHTML = `
+        <div class="flex items-center gap-4 mb-5">
+          <div class="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-white/[0.1] shadow-lg bg-[#0b0f19]">${renderCover(track)}</div>
+          <div class="min-w-0">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#ec4899]/15 text-[#f472b6] border border-[#ec4899]/30">Rang #${padRank(track.rank)} · ${regionLabel}</span>
+            <h3 class="text-lg font-bold text-white mt-1.5 leading-snug truncate">${track.title}</h3>
+            <p class="text-xs text-slate-400 truncate">${track.artist}</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 bg-[#0b0f19] border border-[#222d47] rounded-xl p-4 text-xs mb-4">
+          <div>
+            <p class="text-slate-500 text-[10px] uppercase tracking-wider">Écoutes cumulées</p>
+            <p class="text-white font-bold text-sm mt-0.5 tabular-nums">${fmtFull(track.streams)}</p>
+          </div>
+          <div><p class="text-slate-500 text-[10px] uppercase tracking-wider">Album</p><p class="text-slate-200 font-medium mt-0.5 truncate">${track.album || 'Single'}</p></div>
+          <div><p class="text-slate-500 text-[10px] uppercase tracking-wider">Année</p><p class="text-slate-200 font-medium mt-0.5">${track.year || '2024'}</p></div>
+          <div><p class="text-slate-500 text-[10px] uppercase tracking-wider">Durée</p><p class="text-slate-200 font-medium mt-0.5">${track.duration || '3:00'}</p></div>
+        </div>
+        <div id="spotifyEmbed" class="mb-4">
+          <div class="text-xs text-slate-500 italic text-center py-2 pulse">Chargement du lecteur Spotify...</div>
+        </div>
+        <div class="flex items-center justify-between gap-2.5">
+          <button onclick="closeModal()" class="px-4 py-2 rounded-full text-xs text-slate-400 hover:text-white transition">Fermer</button>
+          <div class="flex gap-2">
+            <a id="spLink" href="#" target="_blank" rel="noopener noreferrer" class="hidden px-4 py-2 rounded-full bg-[#1db954]/15 hover:bg-[#1db954]/30 text-[#1db954] border border-[#1db954]/40 text-xs font-semibold transition flex items-center gap-1.5">
+              <span>Ouvrir sur Spotify</span> ↗
+            </a>
+            <button onclick='playTrack(${JSON.stringify(track).replace(/'/g,"&#39;")}); closeModal();'
+              class="px-5 py-2 rounded-full hitlyst-play-btn text-white font-semibold text-xs hover:brightness-110 transition flex items-center gap-2">
+              ▶ Lancer l'extrait
+            </button>
+          </div>
+        </div>`;
+
+      qs('#detailModal').classList.remove('hidden');
+
+      const media = await resolveMedia(track);
+      const embed = qs('#spotifyEmbed');
+      const link  = qs('#spLink');
+
+      if (media.spotifyId && embed) {
+        embed.innerHTML = `<iframe style="border-radius:12px" src="https://open.spotify.com/embed/track/${media.spotifyId}?utm_source=generator&theme=0" width="100%" height="80" frameBorder="0" allowfullscreen allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
+      } else if (embed) {
+        embed.innerHTML = `<div class="p-3 rounded-xl bg-white/[0.03] text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+          <span>🎵 Extrait 30s prêt via le lecteur principal.</span>
+        </div>`;
+      }
+
+      if (link) {
+        link.href = media.spotifyUrl || `https://open.spotify.com/search/${encodeURIComponent(track.title + ' ' + track.artist)}`;
+        link.classList.remove('hidden');
+      }
+    }
+
+    function openPrivacyModal() {
+      qs('#modalContent').innerHTML = `
+        <p class="text-[10px] font-bold uppercase tracking-wider hitlyst-gradient-text inline-block mb-1">CONFIDENTIALITÉ</p>
+        <h3 class="text-lg font-bold text-white mb-3">Données & Respect de la vie privée</h3>
+        <p class="text-xs text-slate-400 leading-relaxed mb-4">HitLyst ne contient aucune clé ni secret API. Les identifiants Spotify sont conservés sur le serveur dans des variables d'environnement et ne sont jamais envoyés au navigateur, ni à un proxy tiers. Seul un cache local de pochettes et d'extraits audio est conservé dans votre navigateur (stockage local). Les visuels et extraits proviennent des CDN officiels de Spotify et Apple.</p>
+        <div class="flex justify-end">
+          <button onclick="closeModal()" class="px-5 py-2 rounded-full hitlyst-gradient-bg text-white font-semibold text-xs hover:brightness-110 transition">Compris</button>
+        </div>`;
+      qs('#detailModal').classList.remove('hidden');
+    }
+
+    function closeModal() { qs('#detailModal').classList.add('hidden'); }
+    function closeModalOnBackdrop(e) { if (e.target.id === 'detailModal') closeModal(); }
+
+    // =========================================================
+    // AUDIO ENGINE & PLAYER (Lecture Haute Fidélité + Secours Sonore)
+    // =========================================================
+    let audioCtx = null;
+    let masterGain = null;
+    let progressInterval = null;
+    let progressPercent = 0;
+
+    function initWebAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          audioCtx = new AudioContext();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.setValueAtTime(currentVolume, audioCtx.currentTime);
+          masterGain.connect(audioCtx.destination);
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function triggerMelodicSynth(seed) {
+      try {
+        initWebAudio();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        const scale = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25];
+        const n1 = scale[Math.abs(seed) % scale.length];
+        const n2 = scale[(Math.abs(seed) + 2) % scale.length];
+        const n3 = scale[(Math.abs(seed) + 4) % scale.length];
+
+        [n1, n2, n3].forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          gain.gain.setValueAtTime(0.08, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.8 + idx * 0.3);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start(now + idx * 0.08);
+          osc.stop(now + 3.2);
+        });
+      } catch(e){}
+    }
+
+    function setupAudio() {
+      const a = qs('#htmlAudioPlayer');
+      if (!a) return;
+      a.volume = currentVolume;
+      a.addEventListener('timeupdate', () => {
+        if (!a.duration || !isFinite(a.duration)) return;
+        qs('#playerProgress').style.width = `${(a.currentTime / a.duration) * 100}%`;
+        qs('#playerTime').textContent = `${fmtSec(a.currentTime)} / ${fmtSec(a.duration)}`;
+      });
+      a.addEventListener('ended', () => {
+        clearInterval(progressInterval);
+        playAdjacentTrack(1);
+      });
+      a.addEventListener('pause', () => {
+        isPlaying = false;
+        updatePlayUI();
+      });
+      a.addEventListener('play', () => {
+        isPlaying = true;
+        updatePlayUI();
+      });
+    }
+
+    function seekAudio(e) {
+      const a = qs('#htmlAudioPlayer');
+      const r = e.currentTarget.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      qs('#playerProgress').style.width = `${pct * 100}%`;
+      if (a && a.duration && isFinite(a.duration)) {
+        a.currentTime = pct * a.duration;
+      }
+    }
+
+    function updateVolume(v) {
+      currentVolume = Math.max(0, Math.min(1, Number(v) / 100));
+      const a = qs('#htmlAudioPlayer');
+      if (a) a.volume = currentVolume;
+      if (masterGain && audioCtx) {
+        masterGain.gain.setValueAtTime(currentVolume, audioCtx.currentTime);
+      }
+    }
+
+    function playAdjacentTrack(dir) {
+      if (!currentTrack) return;
+      const list = currentTracks();
+      const idx = list.findIndex(t => t.title === currentTrack.title);
+      if (idx === -1) return;
+      playTrack(list[(idx + dir + list.length) % list.length]);
+    }
+
+    async function playTrack(track) {
+      initWebAudio();
+      const a = qs('#htmlAudioPlayer');
+      if (currentTrack?.title === track.title) {
+        togglePlayPause();
+        return;
+      }
+
+      currentTrack = track;
+      isPlaying = true;
+      progressPercent = 0;
+      clearInterval(progressInterval);
+
+      qs('#miniPlayer').classList.remove('hidden');
+      qs('#playerCover').innerHTML = renderCover(track, 'w-11 h-11');
+      qs('#playerTitle').textContent = track.title;
+      qs('#playerArtist').textContent = `${track.artist} · ${track.album || 'Single'}`;
+      qs('#playerTime').textContent = 'Préparation audio...';
+      qs('#playerProgress').style.width = '0%';
+      const badge = qs('#playerSourceBadge');
+      badge.textContent = 'Chargement...';
+      badge.classList.remove('hidden');
+
+      const spLink = qs('#playerSpotifyDirectLink');
+      if (spLink) {
+        spLink.href = track.spotifyUrl || `https://open.spotify.com/search/${encodeURIComponent(track.title + ' ' + track.artist)}`;
+      }
+
+      updatePlayUI();
+      renderAll();
+
+      const media = await resolveMedia(track);
+      if (currentTrack?.title !== track.title) return;
+
+      qs('#playerCover').innerHTML = renderCover(track, 'w-11 h-11');
+      if (media.spotifyUrl && spLink) spLink.href = media.spotifyUrl;
+
+      if (media.previewUrl) {
+        a.pause();
+        a.src = media.previewUrl;
+        a.volume = currentVolume;
+        try {
+          await a.play();
+          isPlaying = true;
+          badge.textContent = 'Extrait 30s HQ';
+          qs('#playerTime').textContent = '0:00 / 0:30';
+          startProgressSimulation(30);
+        } catch(err) {
+          activateSynthPlayback(track);
+        }
+      } else {
+        activateSynthPlayback(track);
+      }
+
+      updatePlayUI();
+      renderAll();
+    }
+
+    function activateSynthPlayback(track) {
+      isPlaying = true;
+      triggerMelodicSynth(track.rank + (track.year || 2024));
+      const badge = qs('#playerSourceBadge');
+      badge.textContent = 'Aperçu sonore';
+      startProgressSimulation(30);
+      toast('Extrait audio actif ! Vous pouvez aussi écouter le titre complet sur Spotify.', 'info');
+    }
+
+    function startProgressSimulation(durationSec) {
+      clearInterval(progressInterval);
+      const totalSec = durationSec || 30;
+      const stepMs = 250;
+      const totalSteps = (totalSec * 1000) / stepMs;
+      let currentStep = 0;
+
+      progressInterval = setInterval(() => {
+        if (!isPlaying) return;
+        currentStep++;
+        const pct = Math.min(100, (currentStep / totalSteps) * 100);
+        qs('#playerProgress').style.width = `${pct}%`;
+
+        const currentSec = Math.floor((pct / 100) * totalSec);
+        const mins = Math.floor(currentSec / 60);
+        const secs = currentSec % 60;
+        const totMins = Math.floor(totalSec / 60);
+        const totSecs = totalSec % 60;
+        qs('#playerTime').textContent = `${mins}:${secs < 10 ? '0' : ''}${secs} / ${totMins}:${totSecs < 10 ? '0' : ''}${totSecs}`;
+
+        if (pct >= 100) {
+          clearInterval(progressInterval);
+          playAdjacentTrack(1);
+        }
+      }, stepMs);
+    }
+
+    function togglePlayPause() {
+      if (!currentTrack) return;
+      const a = qs('#htmlAudioPlayer');
+      if (a && a.src) {
+        if (a.paused) {
+          a.play().catch(() => {});
+          isPlaying = true;
+        } else {
+          a.pause();
+          isPlaying = false;
+        }
+      } else {
+        isPlaying = !isPlaying;
+        if (isPlaying) {
+          triggerMelodicSynth(currentTrack.rank);
+          startProgressSimulation(30);
+        } else {
+          clearInterval(progressInterval);
+        }
+      }
+      updatePlayUI();
+      renderAll();
+    }
+
+    function updatePlayUI() {
+      const a = qs('#htmlAudioPlayer');
+      const paused = a && a.src ? a.paused : !isPlaying;
+      qs('#iconPause').classList.toggle('hidden', paused);
+      qs('#iconPlay').classList.toggle('hidden', !paused);
+      qs('#playerEq').classList.toggle('opacity-20', paused);
+    }
+
+    function closePlayer() {
+      const a = qs('#htmlAudioPlayer');
+      if (a) {
+        a.pause();
+        a.removeAttribute('src');
+      }
+      isPlaying = false;
+      currentTrack = null;
+      clearInterval(progressInterval);
+      qs('#miniPlayer').classList.add('hidden');
+      renderAll();
+    }
+
+    function toast(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.innerHTML = `<span>${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span><span>${msg}</span>`;
+      document.body.appendChild(el);
+      setTimeout(() => el.classList.add('hide'), 3200);
+      setTimeout(() => el.remove(), 3600);
+    }
+
+    function qs(sel)   { return document.querySelector(sel); }
+    function qsa(sel)  { return document.querySelectorAll(sel); }
+
+    document.addEventListener('click', e => {
+      if (!qs('#countryDropdownContainer')?.contains(e.target)) closeDropdown();
+    });
+
+    // =========================================================
+    // PRÉCHARGEMENT INITIAL (Auto-hydratation en arrière-plan)
+    // =========================================================
+    async function backgroundHydrate() {
+      const tracks = currentTracks();
+      const topTracks = tracks.slice(0, 15);
+      for (const t of topTracks) {
+        const key = `${t.title}::${t.artist}`;
+        if (!coverCache[key]?.previewUrl) {
+          try {
+            const res = await searchAudioPreview(t.title, t.artist);
+            if (res) {
+              coverCache[key] = Object.assign(coverCache[key] || {}, res);
+              if (res.coverUrl) {
+                // Actualise discrètement l'image si elle est présente
+                const imgs = document.querySelectorAll(`img[alt="${t.title.replace(/"/g, '&quot;')}"]`);
+                imgs.forEach(img => {
+                  if (img.style.display === 'none' || !img.complete) {
+                    img.src = res.coverUrl;
+                    img.style.display = 'block';
+                  }
+                });
+              }
+            }
+          } catch(e){}
+          await new Promise(r => setTimeout(r, 150));
+        }
+      }
+      saveCovers();
+    }
+
+    // =========================================================
+    // INIT AU CHARGEMENT DE LA PAGE
+    // =========================================================
+    window.addEventListener('DOMContentLoaded', async () => {
+      setupAudio();
+
+      // Affiche immédiatement tous les 50 morceaux et leurs visuels dès la première milliseconde
+      renderAll();
+
+      // Vérifie le proxy serveur sécurisé, puis synchronise si disponible
+      if (await checkServerConfig()) {
+        await fetchPlaylist('world', true);
+        renderAll();
+      }
+
+      // Lance la résolution des extraits audio en arrière-plan
+      backgroundHydrate();
+    });
+  </script>
+</body>
+</html>
