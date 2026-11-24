@@ -11,17 +11,17 @@ class Favori
     {
         $connexion = $this->db->getConnexion();
         $req = "SELECT * FROM favoris";
-        $stmt = $connexion->prepare($req);
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $cmd = $connexion->prepare($req);
+        $cmd->execute();
+        return $cmd->fetchAll(PDO::FETCH_ASSOC);
     }
     public function getFavoriById($id)
     {
         $connexion = $this->db->getConnexion();
         $req = "SELECT * FROM favoris WHERE id_Utilisateur = :id_Utilisateur";
-        $stmt = $connexion->prepare($req);
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        $cmd = $connexion->prepare($req);
+        $cmd->bindParam(':id', $id, PDO::PARAM_INT);
+        $cmd->execute();
+        return $cmd->fetch(PDO::FETCH_ASSOC);
     }
 }

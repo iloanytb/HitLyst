@@ -10,18 +10,18 @@ class Musique
         public function getAllMusics()
         {
                 $connexion = $this->db->getConnexion();
-                $query = "SELECT * FROM musique";
-                $stmt = $connexion->prepare($query);
-                $stmt->execute();
-                return $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $req = "SELECT * FROM musique";
+                $cmd = $connexion->prepare($req);
+                $cmd->execute();
+                return $cmd->fetchAll(PDO::FETCH_ASSOC);
         }
         public function getMusicById($id)
         {
                 $connexion = $this->db->getConnexion();
-                $query = "SELECT * FROM musique WHERE id = :id";
-                $stmt = $connexion->prepare($query);
-                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-                $stmt->execute();
-                return $stmt->fetch(PDO::FETCH_ASSOC);
+                $req = "SELECT * FROM musique WHERE id = :id";
+                $cmd = $connexion->prepare($req);
+                $cmd->bindParam(':id', $id, PDO::PARAM_INT);
+                $cmd->execute();
+                return $cmd->fetch(PDO::FETCH_ASSOC);
         }
 }
